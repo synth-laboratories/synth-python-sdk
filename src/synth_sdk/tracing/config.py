@@ -12,7 +12,6 @@ class InMemoryExporter(SpanExporter):
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         for span in spans:
-            #print(f"Exporting span: {span.name}")  # Added print statement
             self.spans.append({
                 "name": span.name,
                 "context": {
