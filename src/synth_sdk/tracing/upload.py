@@ -6,13 +6,18 @@ import logging
 
 def send_trajectories(traces: List[TrajectoryTrace], dataset: Dataset, base_url: str, api_key: str) -> requests.Response:
     # Get the token using the API key
+    # token_url = f"{base_url}/token"
+    # token_response = requests.post(token_url, headers={"Authorization": f"Bearer {api_key}"})
+    # token_response.raise_for_status()
+    # access_token = token_response.json()["access_token"]
     token_url = f"{base_url}/token"
-    token_response = requests.post(token_url, headers={"Authorization": f"Bearer {api_key}"})
+    token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
+
     # Send the traces with the token
-    api_url = f"{base_url}/traces/"
+    api_url = f"{base_url}/upload/"
     traces_dict = [trace.to_dict() for trace in traces]
     dataset_dict = dataset.to_dict()
     payload = {"traces": traces_dict, "dataset": dataset_dict}
@@ -24,6 +29,7 @@ def send_trajectories(traces: List[TrajectoryTrace], dataset: Dataset, base_url:
         response = requests.post(api_url, json=payload, headers=headers)
         response.raise_for_status()
         logging.info(f"Response status code: {response.status_code}")
+        logging.info(f"Upload ID: {response.json().get('upload_id')}")
         return response
     except requests.exceptions.HTTPError as http_err:
         logging.error(f"HTTP error occurred: {http_err}")
@@ -50,3 +56,4 @@ async def upload(dataset: Dataset, verbose: bool = False):
         print("Response status code:", response.status_code)
         if response.status_code == 202:
             print("Upload successful")
+    return response
