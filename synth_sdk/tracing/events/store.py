@@ -9,17 +9,20 @@ from threading import RLock  # Change this import
 
 logger = logging.getLogger(__name__)
 
+
 class EventStore:
     def __init__(self):
         self._traces: Dict[str, SystemTrace] = {}
         self._lock = RLock()  # Use RLock instead of Lock
         self.logger = logging.getLogger(__name__)
 
-    def get_or_create_system_trace(self, system_id: str, _already_locked: bool = False) -> SystemTrace:
+    def get_or_create_system_trace(
+        self, system_id: str, _already_locked: bool = False
+    ) -> SystemTrace:
         """Get or create a SystemTrace for the given system_id."""
         logger = logging.getLogger(__name__)
         logger.debug(f"Starting get_or_create_system_trace for {system_id}")
-        
+
         def _get_or_create():
             logger.debug("Inside _get_or_create")
             if system_id not in self._traces:
@@ -31,7 +34,7 @@ class EventStore:
                 )
             logger.debug("Returning system trace")
             return self._traces[system_id]
-        
+
         if _already_locked:
             return _get_or_create()
         else:
@@ -43,40 +46,48 @@ class EventStore:
         """Increment the partition index for a system and create new partition element."""
         logger = logging.getLogger(__name__)
         logger.debug(f"Starting increment_partition for system {system_id}")
-        
+
         with self._lock:
             logger.debug("Lock acquired in increment_partition")
-            system_trace = self.get_or_create_system_trace(system_id, _already_locked=True)
-            logger.debug(f"Got system trace, current index: {system_trace.current_partition_index}")
-            
+            system_trace = self.get_or_create_system_trace(
+                system_id, _already_locked=True
+            )
+            logger.debug(
+                f"Got system trace, current index: {system_trace.current_partition_index}"
+            )
+
             system_trace.current_partition_index += 1
-            logger.debug(f"Incremented index to: {system_trace.current_partition_index}")
-            
+            logger.debug(
+                f"Incremented index to: {system_trace.current_partition_index}"
+            )
+
             system_trace.partition.append(
                 EventPartitionElement(
                     partition_index=system_trace.current_partition_index, events=[]
                 )
             )
             logger.debug("Added new partition element")
-            
+
             return system_trace.current_partition_index
 
     def add_event(self, system_id: str, event: Event):
         """Add an event to the appropriate partition of the system trace."""
-        self.logger.debug(f"Attempting to add event for system {system_id}")
-        
+        self.logger.debug(f"Adding event type {event.event_type} to system {system_id}")
+        self.logger.debug(
+            f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
+        )
+
         try:
-            # Use a timeout on the lock to prevent deadlocks
-            if not self._lock.acquire(timeout=5):  # 5 second timeout
+            if not self._lock.acquire(timeout=5):
                 self.logger.error("Failed to acquire lock within timeout period")
                 return
-                
-            try:
-                self.logger.debug("Lock acquired")
-                system_trace = self.get_or_create_system_trace(system_id)
-                self.logger.debug(f"Got system trace for {system_id}")
 
-                # Find the current partition element
+            try:
+                system_trace = self.get_or_create_system_trace(system_id)
+                self.logger.debug(
+                    f"Got system trace with {len(system_trace.partition)} partitions"
+                )
+
                 current_partition = next(
                     (
                         p
@@ -85,46 +96,21 @@ class EventStore:
                     ),
                     None,
                 )
-                self.logger.debug(f"Found partition: {current_partition is not None}")
 
                 if current_partition is None:
-                    self.logger.error(f"No partition found for index {event.partition_index}")
+                    self.logger.error(
+                        f"No partition found for index {event.partition_index} - existing partitions: {set([p.partition_index for p in system_trace.partition])}"
+                    )
                     raise ValueError(
-                        f"No partition found for index {event.partition_index} "
-                        f"in system {system_id}"
+                        f"No partition found for index {event.partition_index}"
                     )
 
                 current_partition.events.append(event)
-                self.logger.debug(f"Event appended to partition. Total events: {len(current_partition.events)}")
-
+                self.logger.debug(
+                    f"Added event to partition {event.partition_index}. Total events: {len(current_partition.events)}"
+                )
             finally:
                 self._lock.release()
-                self.logger.debug("Lock released")
-
-            # Create a span for the event outside the lock
-            self.logger.debug("About to create span")
-            with tracer.start_as_current_span(event.event_type) as span:
-                self.logger.debug("Span created")
-                span.set_attribute("system.id", system_id)
-                span.set_attribute("event.opened", event.opened)
-                span.set_attribute("event.closed", event.closed)
-                span.set_attribute("event.partition_index", event.partition_index)
-                self.logger.debug("Span attributes set")
-
-                for step in event.agent_compute_steps:
-                    self.logger.debug(f"Adding compute step {step.event_order}")
-                    span.add_event(
-                        "agent_compute",
-                        {
-                            "order": step.event_order,
-                            "began": step.compute_began,
-                            "ended": step.compute_ended,
-                            "input": step.compute_input,
-                            "output": step.compute_output,
-                        },
-                    )
-                self.logger.debug("Finished processing span")
-
         except Exception as e:
             self.logger.error(f"Error in add_event: {str(e)}", exc_info=True)
             raise

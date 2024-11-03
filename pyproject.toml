@@ -1,6 +1,6 @@
 [project]
 name = "synth-sdk"
-version = "0.2.19"
+version = "0.2.25"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
@@ -13,6 +13,7 @@ dependencies = [
     "requests",
     "asyncio",
     "zyk>=0.2.18",
+    "build>=1.2.2.post1",
 ]
 classifiers = []
 

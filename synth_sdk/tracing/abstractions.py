@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel
 
+
 @dataclass
 class ComputeStep:
     event_order: int
@@ -19,11 +20,14 @@ class ComputeStep:
             "compute_output": self.compute_output,
         }
 
+
 class AgentComputeStep(ComputeStep):
     pass
 
+
 class EnvironmentComputeStep(ComputeStep):
     pass
+
 
 @dataclass
 class Event:
@@ -40,9 +44,14 @@ class Event:
             "opened": self.opened,
             "closed": self.closed,
             "partition_index": self.partition_index,
-            "agent_compute_steps": [step.to_dict() for step in self.agent_compute_steps],
-            "environment_compute_steps": [step.to_dict() for step in self.environment_compute_steps],
+            "agent_compute_steps": [
+                step.to_dict() for step in self.agent_compute_steps
+            ],
+            "environment_compute_steps": [
+                step.to_dict() for step in self.environment_compute_steps
+            ],
         }
+
 
 @dataclass
 class EventPartitionElement:
@@ -54,6 +63,7 @@ class EventPartitionElement:
             "partition_index": self.partition_index,
             "events": [event.to_dict() for event in self.events],
         }
+
 
 @dataclass
 class SystemTrace:
@@ -78,19 +88,20 @@ class TrainingQuestion(BaseModel):
         return {
             "intent": self.intent,
             "criteria": self.criteria,
+            "question_id": self.question_id,
         }
 
 
 class RewardSignal(BaseModel):
     question_id: Optional[str] = None
-    agent_id: str
+    system_id: str
     reward: Union[float, int, bool]
     annotation: Optional[str] = None
 
     def to_dict(self):
         return {
             "question_id": self.question_id,
-            "agent_id": self.agent_id,
+            "system_id": self.system_id,
             "reward": self.reward,
             "annotation": self.annotation,
         }

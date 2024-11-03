@@ -212,6 +212,22 @@ wheels = [
 ]
 
 [[package]]
+name = "build"
+version = "1.2.2.post1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "os_name == 'nt'" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.10.2'" },
+    { name = "packaging" },
+    { name = "pyproject-hooks" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7d/46/aeab111f8e06793e4f0e421fcad593d547fb8313b50990f31681ee2fb1ad/build-1.2.2.post1.tar.gz", hash = "sha256:b36993e92ca9375a219c99e606a122ff365a760a2d4bba0caa09bd5278b608b7", size = 46701 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/c2/80633736cd183ee4a62107413def345f7e6e3c01563dbca1417363cf957e/build-1.2.2.post1-py3-none-any.whl", hash = "sha256:1d61c0887fa860c01971625baae8bdd338e517b836a2f70dd1f7aa3a6b2fc5b5", size = 22950 },
+]
+
+[[package]]
 name = "cachetools"
 version = "5.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1432,6 +1448,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyproject-hooks"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/82/28175b2414effca1cdac8dc99f76d660e7a4fb0ceefa4b4ab8f5f6742925/pyproject_hooks-1.2.0.tar.gz", hash = "sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8", size = 19228 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/24/12818598c362d7f300f18e74db45963dbcb85150324092410c8b49405e42/pyproject_hooks-1.2.0-py3-none-any.whl", hash = "sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913", size = 10216 },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1554,10 +1579,11 @@ wheels = [
 
 [[package]]
 name = "synth-sdk"
-version = "0.2.18"
+version = "0.2.20"
 source = { editable = "." }
 dependencies = [
     { name = "asyncio" },
+    { name = "build" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
     { name = "pydantic" },
@@ -1568,6 +1594,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "asyncio" },
+    { name = "build", specifier = ">=1.2.2.post1" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
     { name = "pydantic" },
@@ -1679,6 +1706,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/24/e8/20d71cb85d3f3f39e01246f7827b42b6f9862332c500433f20307addc212/tokenizers-0.20.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c5ffe0d7f7bfcfa3b2585776ecf11da2e01c317027c8573c78ebcb8985279e23", size = 2982637 },
     { url = "https://files.pythonhosted.org/packages/2a/63/a640fc3e011bb0392e05c9e5f7054c039d3542426dec46f6b7c8e753d999/tokenizers-0.20.1-pp39-pypy39_pp73-musllinux_1_1_aarch64.whl", hash = "sha256:e7edb8ec12c100d5458d15b1e47c0eb30ad606a05641f19af7563bc3d1608c14", size = 8989341 },
     { url = "https://files.pythonhosted.org/packages/da/96/1603264112ce0fb5da7dae215de037d21dcd9b7c6947ed575b9e81a0d05a/tokenizers-0.20.1-pp39-pypy39_pp73-musllinux_1_1_x86_64.whl", hash = "sha256:de291633fb9303555793cc544d4a86e858da529b7d0b752bcaf721ae1d74b2c9", size = 9301114 },
+]
+
+[[package]]
+name = "tomli"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/b9/de2a5c0144d7d75a57ff355c0c24054f965b2dc3036456ae03a51ea6264b/tomli-2.0.2.tar.gz", hash = "sha256:d46d457a85337051c36524bc5349dd91b1877838e2979ac5ced3e710ed8a60ed", size = 16096 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/db/ce8eda256fa131af12e0a76d481711abe4681b6923c27efb9a255c9e4594/tomli-2.0.2-py3-none-any.whl", hash = "sha256:2ebe24485c53d303f690b0ec092806a085f07af5a5aa1464f3931eec36caaa38", size = 13237 },
 ]
 
 [[package]]
