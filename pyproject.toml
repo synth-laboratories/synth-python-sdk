@@ -14,6 +14,9 @@ dependencies = [
     "asyncio",
     "zyk>=0.2.18",
     "build>=1.2.2.post1",
+    "pypi",
+    "twine>=4.0.0",
+    "keyring>=24.0.0"
 ]
 classifiers = []
 
