@@ -7,6 +7,7 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from typing import Sequence, Dict, List
 import json
+from pydantic import BaseModel
 
 
 class InMemoryExporter(SpanExporter):
@@ -68,3 +69,7 @@ tracer = trace.get_tracer(__name__)
 
 def shutdown_tracer_provider():
     tracer_provider.shutdown()
+
+
+# Update VALID_TYPES to include NoneType
+VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))

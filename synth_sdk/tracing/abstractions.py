@@ -5,6 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class ComputeStep:
     event_order: int
@@ -38,7 +39,7 @@ class ComputeStep:
             "compute_ended": self.compute_ended,
             "compute_began": self.compute_began,
             "compute_input": serializable_input,
-            "compute_output": serializable_output
+            "compute_output": serializable_output,
         }
 
 

@@ -38,15 +38,14 @@ class TestAgent:
     def make_lm_call(self, user_message: str) -> str:
         # Only pass the user message, not self
         trace.input([user_message], "agent")
-        
+
         logger.debug("Starting LM call with message: %s", user_message)
         response = self.lm.respond_sync(
-            system_message="You are a helpful assistant.", 
-            user_message=user_message
+            system_message="You are a helpful assistant.", user_message=user_message
         )
-        
+
         trace.output(response, "agent")
-        
+
         logger.debug("LM response received: %s", response)
         time.sleep(0.1)
         return response
@@ -60,9 +59,9 @@ class TestAgent:
     def process_environment(self, input_data: str) -> dict:
         # Only pass the input data, not self
         trace.input([input_data], "environment")
-        
+
         result = {"processed": input_data, "timestamp": time.time()}
-        
+
         trace.output(result, "environment")
         return result
 
@@ -89,7 +88,7 @@ async def run_test():
                 # First process in environment
                 env_result = agent.process_environment(question)
                 logger.debug("Environment processing result: %s", env_result)
-                
+
                 # Then make LM call
                 response = agent.make_lm_call(question)
                 responses.append(response)

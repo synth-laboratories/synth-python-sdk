@@ -3,6 +3,7 @@ import synth_sdk.config.settings
 import os
 from collections import defaultdict
 
+
 def get_imports(file_path):
     """Extract all imports from a Python file."""
     with open(file_path) as f:
