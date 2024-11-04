@@ -1,3 +1,4 @@
+# synth_sdk/tracing/decorators.py
 from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union
 from functools import wraps
 import threading
@@ -17,7 +18,26 @@ from synth_sdk.tracing.local import _local, logger
 from synth_sdk.tracing.trackers import synth_tracker_sync, synth_tracker_async
 from synth_sdk.tracing.events.manage import set_current_event
 
-# This decorator is used to trace synchronous functions
+from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union
+from functools import wraps
+import time
+import logging
+import inspect
+from pydantic import BaseModel
+
+from synth_sdk.tracing.abstractions import (
+    Event,
+    AgentComputeStep,
+    EnvironmentComputeStep,
+)
+from synth_sdk.tracing.events.store import event_store
+from synth_sdk.tracing.local import system_id_var, active_events_var
+from synth_sdk.tracing.trackers import synth_tracker_async
+from synth_sdk.tracing.events.manage import set_current_event
+
+logger = logging.getLogger(__name__)
+
+# # This decorator is used to trace synchronous functions
 def trace_system_sync(
     origin: Literal["agent", "environment"],
     event_type: str,
@@ -182,7 +202,6 @@ def trace_system_sync(
 
     return decorator
 
-# This decorator is used to trace asynchronous functions
 def trace_system_async(
     origin: Literal["agent", "environment"],
     event_type: str,
@@ -209,16 +228,18 @@ def trace_system_async(
             if not hasattr(self_instance, "system_id"):
                 raise ValueError("Instance missing required system_id attribute")
 
-            _local.system_id = self_instance.system_id
-            logger.debug(f"Set system_id in thread local: {_local.system_id}")
+            # Set system_id using context variable
+            system_id_token = system_id_var.set(self_instance.system_id)
+            logger.debug(f"Set system_id in context vars: {self_instance.system_id}")
 
             # Initialize AsyncTrace
             synth_tracker_async.initialize()
 
             # Initialize active_events if not present
-            if not hasattr(_local, "active_events"):
-                _local.active_events = {}
-                logger.debug("Initialized active_events in thread local storage")
+            current_active_events = active_events_var.get()
+            if not current_active_events:
+                active_events_var.set({})
+                logger.debug("Initialized active_events in context vars")
 
             event = None
             compute_began = time.time()
@@ -229,13 +250,13 @@ def trace_system_async(
                         event_type=event_type,
                         opened=compute_began,
                         closed=None,
-                        partition_index=0,  # Will be updated if increment_partition is True
+                        partition_index=0,
                         agent_compute_steps=[],
                         environment_compute_steps=[],
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
-                            _local.system_id
+                            system_id_var.get()
                         )
                         logger.debug(
                             f"Incremented partition to: {event.partition_index}"
@@ -323,17 +344,19 @@ def trace_system_async(
                 # Handle event management after function execution
                 if (
                     manage_event in ["end", "lazy_end"]
-                    and event_type in _local.active_events
+                    and event_type in active_events_var.get()
                 ):
-                    current_event = _local.active_events[event_type]
+                    current_event = active_events_var.get()[event_type]
                     current_event.closed = compute_ended
                     # Store the event
-                    if hasattr(_local, "system_id"):
-                        event_store.add_event(_local.system_id, current_event)
+                    if system_id_var.get():
+                        event_store.add_event(system_id_var.get(), current_event)
                         logger.debug(
-                            f"Stored and closed event {event_type} for system {_local.system_id}"
+                            f"Stored and closed event {event_type} for system {system_id_var.get()}"
                         )
-                    del _local.active_events[event_type]
+                    active_events = active_events_var.get()
+                    del active_events[event_type]
+                    active_events_var.set(active_events)
 
                 return result
             except Exception as e:
@@ -341,9 +364,9 @@ def trace_system_async(
                 raise
             finally:
                 synth_tracker_async.finalize()
-                if hasattr(_local, "system_id"):
-                    logger.debug(f"Cleaning up system_id: {_local.system_id}")
-                    delattr(_local, "system_id")
+                # Reset context variable for system_id
+                system_id_var.reset(system_id_token)
+                logger.debug(f"Cleaning up system_id from context vars")
 
         return async_wrapper
 

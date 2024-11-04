@@ -5,6 +5,8 @@ import time
 import logging
 import inspect
 import contextvars
+from contextvars import ContextVar
+
 from pydantic import BaseModel
 
 
@@ -12,3 +14,5 @@ logger = logging.getLogger(__name__)
 
 # Thread-local storage for active events and system_id
 _local = threading.local()
+system_id_var: ContextVar[str] = ContextVar("system_id")
+active_events_var: ContextVar[dict] = ContextVar("active_events", default={})
