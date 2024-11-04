@@ -34,7 +34,7 @@ class TestAgent:
         manage_event="create",
         increment_partition=True,
         log_vars_input={"user_message"},
-        log_vars_output={"response"},
+        log_vars_output={"response", "rand_var"},
         verbose=True,
     )
     def make_lm_call(self, user_message: str) -> str:
@@ -42,6 +42,7 @@ class TestAgent:
         response = self.lm.respond_sync(
             system_message="You are a helpful assistant.", user_message=user_message
         )
+        rand_var = 0
         logger.debug("LM response received: %s", response)
         time.sleep(0.1)  # Simulate some processing time
         return response

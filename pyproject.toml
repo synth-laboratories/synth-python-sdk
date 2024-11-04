@@ -1,6 +1,6 @@
 [project]
 name = "synth-sdk"
-version = "0.2.27"
+version = "0.2.28"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
