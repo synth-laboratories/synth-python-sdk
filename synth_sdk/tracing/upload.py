@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from pydantic import BaseModel, validator
-import config.settings
+import synth_sdk.config.settings
 import requests
 import logging
 import os

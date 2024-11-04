@@ -1,20 +1,20 @@
-from typing import Callable, Optional, Set, Literal, Any
+from typing import Callable, Optional, Set, Literal, Any, Dict
 from functools import wraps
 import threading
 import time
+import logging
+import inspect
+
 from synth_sdk.tracing.abstractions import (
     Event,
     AgentComputeStep,
     EnvironmentComputeStep,
 )
 from synth_sdk.tracing.events.store import event_store
-import logging
-import inspect
-import sys
 
 logger = logging.getLogger(__name__)
 
-# Thread-local storage for active events
+# Thread-local storage for active events and system_id
 _local = threading.local()
 
 
@@ -29,10 +29,14 @@ def get_current_event(event_type: str) -> "Event":
     return events[event_type]
 
 
-def set_current_event(event: "Event"):
+def set_current_event(event: Optional["Event"]):
     """
     Set the current event, ending any existing events of the same type.
+    If event is None, it clears the current event of that type.
     """
+    if event is None:
+        raise ValueError("Event cannot be None when setting current event.")
+    
     logger.debug(f"Setting current event of type {event.event_type}")
 
     if not hasattr(_local, "active_events"):
@@ -59,15 +63,15 @@ def set_current_event(event: "Event"):
     else:
         logger.debug(f"No existing event of type {event.event_type}")
 
-    if event is not None:
-        # Set the new event
-        _local.active_events[event.event_type] = event
-        logger.debug("New event set as current")
+    # Set the new event
+    _local.active_events[event.event_type] = event
+    logger.debug("New event set as current")
 
 
 def clear_current_event(event_type: str):
     if hasattr(_local, "active_events"):
         _local.active_events.pop(event_type, None)
+        logger.debug(f"Cleared current event of type {event_type}")
 
 
 def end_event(event_type: str) -> Optional[Event]:
@@ -78,15 +82,55 @@ def end_event(event_type: str) -> Optional[Event]:
         # Store the event
         if hasattr(_local, "system_id"):
             event_store.add_event(_local.system_id, current_event)
-        set_current_event(None)
+        clear_current_event(event_type)
     return current_event
+
+
+class Trace:
+    _local = threading.local()
+
+    @classmethod
+    def initialize(cls):
+        cls._local.initialized = True
+        cls._local.inputs = []  # List of tuples: (origin, var)
+        cls._local.outputs = []  # List of tuples: (origin, var)
+
+    @classmethod
+    def input(cls, var: Any, origin: Literal["agent", "environment"]):
+        if getattr(cls._local, 'initialized', False):
+            cls._local.inputs.append((origin, var))
+            logger.debug(f"Traced input: origin={origin}, var={var}")
+        else:
+            raise RuntimeError("Trace not initialized. Use within a function decorated with @trace_system.")
+
+    @classmethod
+    def output(cls, var: Any, origin: Literal["agent", "environment"]):
+        if getattr(cls._local, 'initialized', False):
+            cls._local.outputs.append((origin, var))
+            logger.debug(f"Traced output: origin={origin}, var={var}")
+        else:
+            raise RuntimeError("Trace not initialized. Use within a function decorated with @trace_system.")
+
+    @classmethod
+    def get_traced_data(cls):
+        return getattr(cls._local, 'inputs', []), getattr(cls._local, 'outputs', [])
+
+    @classmethod
+    def finalize(cls):
+        # Clean up the thread-local storage
+        cls._local.initialized = False
+        cls._local.inputs = []
+        cls._local.outputs = []
+        logger.debug("Finalized trace data")
+
+
+# Make 'trace' available globally
+trace = Trace
 
 
 def trace_system(
     origin: Literal["agent", "environment"],
     event_type: str,
-    log_vars_input: Optional[Set[str]] = None,
-    log_vars_output: Optional[Set[str]] = None,
     log_result: bool = False,
     manage_event: Literal["create", "end", "lazy_end", None] = None,
     increment_partition: bool = False,
@@ -94,12 +138,23 @@ def trace_system(
 ) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not hasattr(self, 'system_id'):
+        def wrapper(*args, **kwargs):
+            # Determine the instance (self) if it's a method
+            if not hasattr(func, '__self__') or not func.__self__:
+                if not args:
+                    raise ValueError("Instance method expected, but no arguments were passed.")
+                self_instance = args[0]
+            else:
+                self_instance = func.__self__
+
+            if not hasattr(self_instance, 'system_id'):
                 raise ValueError("Instance missing required system_id attribute")
-            
-            _local.system_id = self.system_id
+
+            _local.system_id = self_instance.system_id
             logger.debug(f"Set system_id in thread local: {_local.system_id}")
+
+            # Initialize Trace
+            trace.initialize()
 
             # Initialize active_events if not present
             if not hasattr(_local, 'active_events'):
@@ -121,49 +176,97 @@ def trace_system(
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(_local.system_id)
                         logger.debug(f"Incremented partition to: {event.partition_index}")
-                    
-                    # Use set_current_event to handle existing events
+
                     set_current_event(event)
                     logger.debug(f"Created and set new event: {event_type}")
-                
-                # Log input variables
-                if log_vars_input:
-                    bound_args = inspect.signature(func).bind(self, *args, **kwargs)
-                    bound_args.apply_defaults()
-                    inputs = {var: bound_args.arguments[var] for var in log_vars_input if var in bound_args.arguments}
-                    if hasattr(event, 'input_vars') and event is not None:
-                        event.input_vars = inputs
-                        logger.info(f"Logged input variables: {inputs}")
-                    else:
-                        logger.warning("Event object does not have 'input_vars' attribute or event is None")
-                
+
+                # Automatically trace function inputs
+                bound_args = inspect.signature(func).bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                for param, value in bound_args.arguments.items():
+                    trace.input(value, origin)
+
                 # Execute the function
-                result = func(self, *args, **kwargs)
-                
-                # Log output variables
-                if log_vars_output:
-                    if isinstance(result, (list, tuple)):
-                        outputs = {var: result[i] if i < len(result) else None for i, var in enumerate(log_vars_output)}
-                    else:
-                        outputs = {var: getattr(result, var, None) for var in log_vars_output}
-                    
-                    if hasattr(event, 'output_vars') and event is not None:
-                        event.output_vars = outputs
-                        logger.info(f"Logged output variables: {outputs}")
-                    else:
-                        logger.warning("Event object does not have 'output_vars' attribute or event is None")
-                
+                result = func(*args, **kwargs)
+
+                # Automatically trace function output
+                if log_result:
+                    trace.output(result, origin)
+
+                # Collect traced inputs and outputs
+                traced_inputs, traced_outputs = trace.get_traced_data()
+
+                compute_steps_by_origin: Dict[Literal["agent", "environment"], Dict[str, Any]] = {
+                    "agent": {
+                        "inputs": [],
+                        "outputs": []
+                    },
+                    "environment": {
+                        "inputs": [],
+                        "outputs": []
+                    }
+                }
+
+                # Organize traced data by origin
+                for var_origin, var in traced_inputs:
+                    compute_steps_by_origin[var_origin]["inputs"].append(var)
+                for var_origin, var in traced_outputs:
+                    compute_steps_by_origin[var_origin]["outputs"].append(var)
+
+                if log_result and result is not None:
+                    # Already handled above
+                    pass
+
+                # Create compute steps grouped by origin
+                for var_origin in ["agent", "environment"]:
+                    inputs = compute_steps_by_origin[var_origin]["inputs"]
+                    outputs = compute_steps_by_origin[var_origin]["outputs"]
+                    if inputs or outputs:
+                        description = f"{event_type} - {var_origin.capitalize()} Data"
+                        metadata = {
+                            "inputs": inputs,
+                            "outputs": outputs
+                        }
+                        compute_step = AgentComputeStep(
+                            description=description,
+                            timestamp=time.time(),
+                            metadata=metadata
+                        ) if var_origin == "agent" else EnvironmentComputeStep(
+                            description=description,
+                            timestamp=time.time(),
+                            metadata=metadata
+                        )
+                        if event:
+                            if var_origin == "agent":
+                                event.agent_compute_steps.append(compute_step)
+                            else:
+                                event.environment_compute_steps.append(compute_step)
+                        logger.debug(f"Added compute step for {var_origin}: {metadata}")
+
+                # Optionally log the function result
+                if log_result:
+                    logger.info(f"Function result: {result}")
+
+                # Handle event management after function execution
                 if manage_event in ["end", "lazy_end"] and event_type in _local.active_events:
                     current_event = _local.active_events[event_type]
                     current_event.closed = time.time()
-                    # No need to re-add the event; it's already in the event store
-                    logger.debug(f"Closed event {event_type} for system {_local.system_id}")
+                    # Store the event
+                    if hasattr(_local, "system_id"):
+                        event_store.add_event(_local.system_id, current_event)
+                        logger.debug(f"Stored and closed event {event_type} for system {_local.system_id}")
                     del _local.active_events[event_type]
 
                 return result
+            except Exception as e:
+                logger.error(f"Exception in traced function '{func.__name__}': {e}")
+                raise
             finally:
+                trace.finalize()
                 if hasattr(_local, 'system_id'):
                     logger.debug(f"Cleaning up system_id: {_local.system_id}")
                     delattr(_local, 'system_id')
+
         return wrapper
+
     return decorator

@@ -1,5 +1,5 @@
 import ast
-import config.settings
+import synth_sdk.config.settings
 import os
 from collections import defaultdict
 

@@ -1,5 +1,5 @@
 from synth_sdk.tracing.decorators import trace_system
-import config.settings
+import synth_sdk.config.settings
 import time
 import logging
 

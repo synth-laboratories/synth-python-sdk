@@ -4,7 +4,7 @@ from synth_sdk.tracing.upload import upload
 from synth_sdk.tracing.abstractions import TrainingQuestion, RewardSignal, Dataset
 from synth_sdk.tracing.events.store import event_store
 import asyncio
-import config.settings
+import synth_sdk.config.settings
 import time
 import json
 import logging
