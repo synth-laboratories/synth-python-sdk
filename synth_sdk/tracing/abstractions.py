@@ -1,23 +1,44 @@
 from dataclasses import dataclass
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ComputeStep:
     event_order: int
     compute_ended: Any  # time step
     compute_began: Any  # time step
-    compute_input: Any  # json?
-    compute_output: Any  # json?
+    compute_input: Dict[str, Any]  # {variable_name: value}
+    compute_output: Dict[str, Any]  # {variable_name: value}
 
     def to_dict(self):
+        # Define serializable types
+        serializable_types = (str, int, float, bool, list, dict, type(None))
+
+        # Filter compute_input
+        serializable_input = {}
+        for name, value in self.compute_input.items():
+            if isinstance(value, serializable_types):
+                serializable_input[name] = value
+            else:
+                logger.warning(f"Skipping non-serializable input: {name}={value}")
+
+        # Filter compute_output
+        serializable_output = {}
+        for name, value in self.compute_output.items():
+            if isinstance(value, serializable_types):
+                serializable_output[name] = value
+            else:
+                logger.warning(f"Skipping non-serializable output: {name}={value}")
+
         return {
             "event_order": self.event_order,
             "compute_ended": self.compute_ended,
             "compute_began": self.compute_began,
-            "compute_input": self.compute_input,
-            "compute_output": self.compute_output,
+            "compute_input": serializable_input,
+            "compute_output": serializable_output
         }
 
 
