@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel
 import logging
+from synth_sdk.tracing.config import VALID_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,12 @@ class ComputeStep:
 
     def to_dict(self):
         # Define serializable types
-        serializable_types = (str, int, float, bool, list, dict, type(None))
+        #serializable_types = (str, int, float, bool, list, dict, type(None))
 
         # Filter compute_input
         serializable_input = {}
         for name, value in self.compute_input.items():
-            if isinstance(value, serializable_types):
+            if isinstance(value, VALID_TYPES):
                 serializable_input[name] = value
             else:
                 logger.warning(f"Skipping non-serializable input: {name}={value}")
@@ -29,7 +30,7 @@ class ComputeStep:
         # Filter compute_output
         serializable_output = {}
         for name, value in self.compute_output.items():
-            if isinstance(value, serializable_types):
+            if isinstance(value, VALID_TYPES):
                 serializable_output[name] = value
             else:
                 logger.warning(f"Skipping non-serializable output: {name}={value}")
