@@ -36,12 +36,12 @@ class TestAgent:
         increment_partition=True,
         verbose=True,
     )
-    def make_lm_call(self, user_message: str) -> str:
+    async def make_lm_call(self, user_message: str) -> str:
         # Only pass the user message, not self
         SynthTrackerAsync.track_input([user_message], variable_name="user_message", origin="agent")
 
         logger.debug("Starting LM call with message: %s", user_message)
-        response = self.lm.respond_sync(
+        response = await self.lm.respond_async(
             system_message="You are a helpful assistant.", user_message=user_message
         )
 
@@ -57,7 +57,7 @@ class TestAgent:
         manage_event="create",
         verbose=True,
     )
-    def process_environment(self, input_data: str) -> dict:
+    async def process_environment(self, input_data: str) -> dict:
         # Only pass the input data, not self
         SynthTrackerAsync.track_input([input_data], variable_name="input_data", origin="environment")
 
@@ -87,11 +87,11 @@ async def run_test():
             logger.info("Processing question %d: %s", i, question)
             try:
                 # First process in environment
-                env_result = agent.process_environment(question)
+                env_result = await agent.process_environment(question)
                 logger.debug("Environment processing result: %s", env_result)
 
                 # Then make LM call
-                response = agent.make_lm_call(question)
+                response = await agent.make_lm_call(question)
                 responses.append(response)
                 logger.debug("Response received and stored: %s", response)
             except Exception as e:
