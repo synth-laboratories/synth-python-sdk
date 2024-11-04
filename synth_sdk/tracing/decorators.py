@@ -14,7 +14,7 @@ from synth_sdk.tracing.abstractions import (
 )
 from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.local import _local, logger
-from synth_sdk.tracing.tracker import synth_tracker_sync, synth_tracker_async
+from synth_sdk.tracing.trackers import synth_tracker_sync, synth_tracker_async
 from synth_sdk.tracing.events.manage import set_current_event
 
 # This decorator is used to trace synchronous functions
@@ -83,14 +83,14 @@ def trace_system_sync(
                 for param, value in bound_args.arguments.items():
                     if param == "self":
                         continue
-                    synth_tracker_sync.input(value, param, origin)
+                    synth_tracker_sync.track_input(value, param, origin)
 
                 # Execute the function
                 result = func(*args, **kwargs)
 
                 # Automatically trace function output
                 if log_result:
-                    synth_tracker_sync.output(result, "result", origin)
+                    synth_tracker_sync.track_output(result, "result", origin)
 
                 # Collect traced inputs and outputs
                 traced_inputs, traced_outputs = synth_tracker_sync.get_traced_data()
@@ -250,14 +250,14 @@ def trace_system_async(
                 for param, value in bound_args.arguments.items():
                     if param == "self":
                         continue
-                    synth_tracker_async.input(value, param, origin)
+                    synth_tracker_async.track_input(value, param, origin)
 
                 # Execute the coroutine
                 result = await func(*args, **kwargs)
 
                 # Automatically trace function output
                 if log_result:
-                    synth_tracker_async.output(result, "result", origin)
+                    synth_tracker_async.track_output(result, "result", origin)
 
                 # Collect traced inputs and outputs
                 traced_inputs, traced_outputs = synth_tracker_async.get_traced_data()
