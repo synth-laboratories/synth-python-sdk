@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from synth_sdk.tracing.local import logger
 from synth_sdk.tracing.config import VALID_TYPES
 
-
+# This tracker ought to be used for synchronous tracing
 class SynthTrackerSync:
     _local = threading.local()
 
@@ -86,6 +86,7 @@ trace_outputs_var = contextvars.ContextVar("trace_outputs", default=None)
 trace_initialized_var = contextvars.ContextVar("trace_initialized", default=False)
 
 
+# This tracker ought to be used for asynchronous tracing
 class SynthTrackerAsync:
     @classmethod
     def initialize(cls):

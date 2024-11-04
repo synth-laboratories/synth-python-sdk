@@ -17,7 +17,7 @@ from synth_sdk.tracing.local import _local, logger
 from synth_sdk.tracing.tracker import synth_tracker_sync, synth_tracker_async
 from synth_sdk.tracing.events.manage import set_current_event
 
-
+# This decorator is used to trace synchronous functions
 def trace_system_sync(
     origin: Literal["agent", "environment"],
     event_type: str,
@@ -182,7 +182,7 @@ def trace_system_sync(
 
     return decorator
 
-
+# This decorator is used to trace asynchronous functions
 def trace_system_async(
     origin: Literal["agent", "environment"],
     event_type: str,
