@@ -202,6 +202,8 @@ async def upload(dataset: Dataset, verbose: bool = False):
     try:
         # Get traces and convert to dict format
         traces = event_store.get_system_traces()
+        if len(traces) == 0:
+            raise ValueError("No system traces found")
         traces_dict = [trace.to_dict() for trace in traces]
         dataset_dict = dataset.to_dict()
 
