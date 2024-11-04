@@ -282,9 +282,6 @@ def trace_system_async(
                 for var_origin in ["agent", "environment"]:
                     inputs = compute_steps_by_origin[var_origin]["inputs"]
                     outputs = compute_steps_by_origin[var_origin]["outputs"]
-                    print("Var origin:", var_origin)
-                    print("Inputs:", inputs)
-                    print("Outputs:", outputs)
                     if inputs or outputs:
                         event_order = (
                             len(event.agent_compute_steps)
