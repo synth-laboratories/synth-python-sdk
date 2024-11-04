@@ -1,13 +1,13 @@
 from typing import Union, Optional, Tuple, Literal
-import threading
+import threading, contextvars
 import contextvars
 from pydantic import BaseModel
-from synth_sdk.tracing.local import logger
+from synth_sdk.tracing.local import logger, _local
 from synth_sdk.tracing.config import VALID_TYPES
 
 # This tracker ought to be used for synchronous tracing
 class SynthTrackerSync:
-    _local = threading.local()
+    _local = _local
 
     @classmethod
     def initialize(cls):
