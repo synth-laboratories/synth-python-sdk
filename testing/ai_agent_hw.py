@@ -1,5 +1,5 @@
 from zyk import LM
-from synth_sdk.tracing.decorators import trace_system, _local
+from synth_sdk.tracing.decorators import trace_system, _local, trace
 from synth_sdk.tracing.upload import upload
 from synth_sdk.tracing.abstractions import TrainingQuestion, RewardSignal, Dataset
 from synth_sdk.tracing.events.store import event_store
@@ -33,19 +33,37 @@ class TestAgent:
         event_type="lm_call",
         manage_event="create",
         increment_partition=True,
-        log_vars_input={"user_message"},
-        log_vars_output={"response", "rand_var"},
         verbose=True,
     )
     def make_lm_call(self, user_message: str) -> str:
+        # Only pass the user message, not self
+        trace.input([user_message], "agent")
+
         logger.debug("Starting LM call with message: %s", user_message)
         response = self.lm.respond_sync(
             system_message="You are a helpful assistant.", user_message=user_message
         )
-        rand_var = 0
+
+        trace.output(response, "agent")
+
         logger.debug("LM response received: %s", response)
-        time.sleep(0.1)  # Simulate some processing time
+        time.sleep(0.1)
         return response
+
+    @trace_system(
+        origin="environment",
+        event_type="environment_processing",
+        manage_event="create",
+        verbose=True,
+    )
+    def process_environment(self, input_data: str) -> dict:
+        # Only pass the input data, not self
+        trace.input([input_data], "environment")
+
+        result = {"processed": input_data, "timestamp": time.time()}
+
+        trace.output(result, "environment")
+        return result
 
 
 async def run_test():
@@ -62,20 +80,21 @@ async def run_test():
         ]
         logger.debug("Test questions initialized: %s", questions)
 
-        # Make multiple LM calls
+        # Make multiple LM calls with environment processing
         responses = []
         for i, question in enumerate(questions):
             logger.info("Processing question %d: %s", i, question)
-            # print("Running question:")
             try:
-                logger.debug("Making LM call for question: %s", question)
+                # First process in environment
+                env_result = agent.process_environment(question)
+                logger.debug("Environment processing result: %s", env_result)
+
+                # Then make LM call
                 response = agent.make_lm_call(question)
                 responses.append(response)
                 logger.debug("Response received and stored: %s", response)
-                # print(f"Q: {question}\nA: {response}\n")
             except Exception as e:
-                logger.error("Error during LM call: %s", str(e), exc_info=True)
-                # print(f"Error during LM call: {str(e)}")
+                logger.error("Error during processing: %s", str(e), exc_info=True)
                 continue
 
         logger.info("Creating dataset for upload")
