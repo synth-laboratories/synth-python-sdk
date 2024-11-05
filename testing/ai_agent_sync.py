@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class TestAgent:
     def __init__(self):
-        self.system_id = "test_agent_1"
+        self.system_id = "test_agent_sync"
         logger.debug("Initializing TestAgent with system_id: %s", self.system_id)
         self.lm = LM(
             model_name="gpt-4o-mini-2024-07-18",
@@ -128,7 +128,7 @@ async def run_test():
         # Upload traces
         try:
             logger.info("Attempting to upload traces")
-            response = await upload(dataset=dataset, verbose=True)
+            response, _ = await upload(dataset=dataset, verbose=True)
             logger.info("Upload successful!")
             print("Upload successful!")
         except Exception as e:

@@ -8,6 +8,7 @@ import time
 from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.abstractions import Dataset
 import json
+from pprint import pprint
 
 
 def validate_json(data: dict) -> None:
@@ -61,7 +62,7 @@ def send_system_traces(
         response.raise_for_status()
         logging.info(f"Response status code: {response.status_code}")
         logging.info(f"Upload ID: {response.json().get('upload_id')}")
-        return response
+        return response, payload
     except requests.exceptions.HTTPError as http_err:
         logging.error(
             f"HTTP error occurred: {http_err} - Response Content: {response.text}"
@@ -165,7 +166,7 @@ def validate_upload(traces: List[Dict[str, Any]], dataset: Dict[str, Any]):
         raise ValueError(f"Upload validation failed: {str(e)}")
 
 
-async def upload(dataset: Dataset, verbose: bool = False):
+async def upload(dataset: Dataset, verbose: bool = False, show_payload: bool = False):
     """Upload all system traces and dataset to the server."""
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
@@ -215,7 +216,7 @@ async def upload(dataset: Dataset, verbose: bool = False):
             print("Upload format validation successful")
 
         # Send to server
-        response = send_system_traces(
+        response, payload = send_system_traces(
             dataset=dataset,
             base_url="https://agent-learning.onrender.com",
             api_key=api_key,
@@ -229,7 +230,11 @@ async def upload(dataset: Dataset, verbose: bool = False):
                     f"Dataset included {len(dataset.questions)} questions and {len(dataset.reward_signals)} reward signals."
                 )
 
-        return response
+        if show_payload:
+            print("Payload sent to server: ")
+            pprint(payload)
+
+        return response, payload
     except ValueError as e:
         if verbose:
             print("Validation error:", str(e))

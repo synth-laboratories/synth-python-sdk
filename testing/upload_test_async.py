@@ -4,11 +4,13 @@ from synth_sdk.tracing.trackers import SynthTrackerAsync
 from synth_sdk.tracing.upload import upload
 from synth_sdk.tracing.abstractions import TrainingQuestion, RewardSignal, Dataset
 from synth_sdk.tracing.events.store import event_store
+from typing import Dict
 import asyncio
 import synth_sdk.config.settings
 import time
 import json
 import logging
+from pprint import pprint
 
 # Configure logging
 logging.basicConfig(
@@ -17,10 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 class TestAgent:
     def __init__(self):
-        self.system_id = "test_agent_async"
+        self.system_id = "test_agent_upload"
         logger.debug("Initializing TestAgent with system_id: %s", self.system_id)
         self.lm = LM(
             model_name="gpt-4o-mini-2024-07-18",
@@ -36,7 +37,7 @@ class TestAgent:
         increment_partition=True,
         verbose=True,
     )
-    async def make_lm_call(self, user_message: str) -> str:
+    async def make_lm_call(self, user_message: str) -> str: # Calls an LLM to respond to a user message
         # Only pass the user message, not self
         SynthTrackerAsync.track_input([user_message], variable_name="user_message", origin="agent")
 
@@ -57,7 +58,7 @@ class TestAgent:
         manage_event="create",
         verbose=True,
     )
-    async def process_environment(self, input_data: str) -> dict:
+    async def process_environment(self, input_data: str) -> dict: # Doesn't really do anything?
         # Only pass the input data, not self
         SynthTrackerAsync.track_input([input_data], variable_name="input_data", origin="environment")
 
@@ -86,11 +87,11 @@ async def run_test():
         for i, question in enumerate(questions):
             logger.info("Processing question %d: %s", i, question)
             try:
-                # First process in environment
+                # First process in environment ==========================================================
                 env_result = await agent.process_environment(question)
                 logger.debug("Environment processing result: %s", env_result)
 
-                # Then make LM call
+                # Then make LM call =====================================================================
                 response = await agent.make_lm_call(question)
                 responses.append(response)
                 logger.debug("Response received and stored: %s", response)
@@ -128,9 +129,10 @@ async def run_test():
         # Upload traces
         try:
             logger.info("Attempting to upload traces")
-            response, _ = await upload(dataset=dataset, verbose=True)
+            response, payload = await upload(dataset=dataset, verbose=True)
             logger.info("Upload successful!")
             print("Upload successful!")
+            pprint(payload)
         except Exception as e:
             logger.error("Upload failed: %s", str(e), exc_info=True)
             print(f"Upload failed: {str(e)}")
