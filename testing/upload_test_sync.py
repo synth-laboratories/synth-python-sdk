@@ -1,14 +1,16 @@
 from zyk import LM
-from synth_sdk.tracing.decorators import trace_system_async, _local
-from synth_sdk.tracing.trackers import SynthTrackerAsync
+from synth_sdk.tracing.decorators import trace_system_sync, _local
+from synth_sdk.tracing.trackers import SynthTrackerSync
 from synth_sdk.tracing.upload import upload
 from synth_sdk.tracing.abstractions import TrainingQuestion, RewardSignal, Dataset
 from synth_sdk.tracing.events.store import event_store
+from typing import Dict
 import asyncio
 import synth_sdk.config.settings
 import time
 import json
 import logging
+from pprint import pprint
 
 # Configure logging
 logging.basicConfig(
@@ -17,10 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 class TestAgent:
     def __init__(self):
-        self.system_id = "test_agent_async"
+        self.system_id = "test_agent_upload"
         logger.debug("Initializing TestAgent with system_id: %s", self.system_id)
         self.lm = LM(
             model_name="gpt-4o-mini-2024-07-18",
@@ -29,45 +30,57 @@ class TestAgent:
         )
         logger.debug("LM initialized")
 
-    @trace_system_async(
+    @trace_system_sync(
         origin="agent",
         event_type="lm_call",
         manage_event="create",
         increment_partition=True,
         verbose=True,
     )
-    async def make_lm_call(self, user_message: str) -> str:
+    def make_lm_call(self, user_message: str) -> str: # Calls an LLM to respond to a user message
         # Only pass the user message, not self
-        SynthTrackerAsync.track_input([user_message], variable_name="user_message", origin="agent")
+        SynthTrackerSync.track_input([user_message], variable_name="user_message", origin="agent")
 
         logger.debug("Starting LM call with message: %s", user_message)
-        response = await self.lm.respond_async(
+        response = self.lm.respond_sync(
             system_message="You are a helpful assistant.", user_message=user_message
         )
 
-        SynthTrackerAsync.track_output(response, variable_name="response", origin="agent")
+        SynthTrackerSync.track_output(response, variable_name="response", origin="agent")
 
         logger.debug("LM response received: %s", response)
         time.sleep(0.1)
         return response
 
-    @trace_system_async(
+    @trace_system_sync(
         origin="environment",
         event_type="environment_processing",
         manage_event="create",
         verbose=True,
     )
-    async def process_environment(self, input_data: str) -> dict:
+    def process_environment(self, input_data: str) -> dict: # Doesn't really do anything?
         # Only pass the input data, not self
-        SynthTrackerAsync.track_input([input_data], variable_name="input_data", origin="environment")
+        SynthTrackerSync.track_input([input_data], variable_name="input_data", origin="environment")
 
         result = {"processed": input_data, "timestamp": time.time()}
 
-        SynthTrackerAsync.track_output(result, variable_name="result", origin="environment")
+        SynthTrackerSync.track_output(result, variable_name="result", origin="environment")
         return result
+    
+    # This function generates a payload from the data in the dataset to compare the sent payload against
+    def generate_payload_from_data(self, dataset: Dataset) -> Dict:
+        traces = event_store.get_system_traces()
+
+        payload = {
+            "traces": [
+                trace.to_dict() for trace in traces
+            ],  # Convert SystemTrace objects to dicts
+            "dataset": dataset.to_dict(),
+        }
+        return payload
 
 
-async def run_test():
+async def run_test(show_payload: bool = False):
     logger.info("Starting run_test")
     # Create test agent
     agent = TestAgent()
@@ -86,12 +99,12 @@ async def run_test():
         for i, question in enumerate(questions):
             logger.info("Processing question %d: %s", i, question)
             try:
-                # First process in environment
-                env_result = await agent.process_environment(question)
+                # First process in environment ==========================================================
+                env_result = agent.process_environment(question)
                 logger.debug("Environment processing result: %s", env_result)
 
-                # Then make LM call
-                response = await agent.make_lm_call(question)
+                # Then make LM call =====================================================================
+                response = agent.make_lm_call(question)
                 responses.append(response)
                 logger.debug("Response received and stored: %s", response)
             except Exception as e:
@@ -128,9 +141,20 @@ async def run_test():
         # Upload traces
         try:
             logger.info("Attempting to upload traces")
-            response, _ = await upload(dataset=dataset, verbose=True)
+            response, payload = await upload(dataset=dataset, verbose=True)
             logger.info("Upload successful!")
             print("Upload successful!")
+            if show_payload:
+                logger.info("Payload sent to server:")  
+                pprint(payload)
+
+            try:
+                assert(payload == agent.generate_payload_from_data(dataset))
+                logger.info("Payload correct")
+            except AssertionError:
+                logger.error("Payload incorrect")
+                pprint(payload)
+
         except Exception as e:
             logger.error("Upload failed: %s", str(e), exc_info=True)
             print(f"Upload failed: {str(e)}")
@@ -174,3 +198,4 @@ if __name__ == "__main__":
     logger.info("Starting main execution")
     asyncio.run(run_test())
     logger.info("Main execution completed")
+    logger.info("Check Supabase table traces for uploaded data use UPLOAD ID key to filter")
