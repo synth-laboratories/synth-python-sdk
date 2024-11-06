@@ -26,6 +26,14 @@ def validate_json(data: dict) -> None:
     except (TypeError, OverflowError) as e:
         raise ValueError(f"Contains non-JSON-serializable values: {e}. {data}")
 
+def createPayload(dataset: Dataset, traces: str) -> Dict[str, Any]:
+    payload = {
+        "traces": [
+            trace.to_dict() for trace in traces
+        ],  # Convert SystemTrace objects to dicts
+        "dataset": dataset.to_dict(),
+    }
+    return payload
 
 def send_system_traces(
     dataset: Dataset, base_url: str, api_key: str
@@ -43,12 +51,7 @@ def send_system_traces(
     # Send the traces with the token
     api_url = f"{base_url}/upload/"
 
-    payload = {
-        "traces": [
-            trace.to_dict() for trace in traces
-        ],  # Convert SystemTrace objects to dicts
-        "dataset": dataset.to_dict(),
-    }
+    payload = createPayload(dataset, traces) # Create the payload
 
     validate_json(payload)  # Validate the entire payload
 
