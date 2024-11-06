@@ -1,5 +1,5 @@
-name: GitHub Actions Demo
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: GitHub Actions CICD Testing Pipeline
+run-name: ${{ github.actor }} pushed to ${{ github.ref }}
 on: [push]
 jobs:
   run-tests:

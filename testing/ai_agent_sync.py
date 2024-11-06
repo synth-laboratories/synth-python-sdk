@@ -1,6 +1,6 @@
 from zyk import LM
-from synth_sdk.tracing.decorators import trace_system_sync, _local
-from synth_sdk.tracing.trackers import SynthTrackerSync
+from synth_sdk.tracing.decorators import trace_system, _local
+from synth_sdk.tracing.trackers import SynthTracker
 from synth_sdk.tracing.upload import upload
 from synth_sdk.tracing.abstractions import TrainingQuestion, RewardSignal, Dataset
 from synth_sdk.tracing.events.store import event_store
@@ -29,7 +29,7 @@ class TestAgent:
         )
         logger.debug("LM initialized")
 
-    @trace_system_sync(
+    @trace_system(
         origin="agent",
         event_type="lm_call",
         manage_event="create",
@@ -38,20 +38,20 @@ class TestAgent:
     )
     def make_lm_call(self, user_message: str) -> str:
         # Only pass the user message, not self
-        SynthTrackerSync.track_input([user_message], variable_name="user_message", origin="agent")
+        SynthTracker.track_input([user_message], variable_name="user_message", origin="agent")
 
         logger.debug("Starting LM call with message: %s", user_message)
         response = self.lm.respond_sync(
             system_message="You are a helpful assistant.", user_message=user_message
         )
 
-        SynthTrackerSync.track_output(response, variable_name="response", origin="agent")
+        SynthTracker.track_output(response, variable_name="response", origin="agent")
 
         logger.debug("LM response received: %s", response)
         time.sleep(0.1)
         return response
 
-    @trace_system_sync(
+    @trace_system(
         origin="environment",
         event_type="environment_processing",
         manage_event="create",
@@ -59,11 +59,11 @@ class TestAgent:
     )
     def process_environment(self, input_data: str) -> dict:
         # Only pass the input data, not self
-        SynthTrackerSync.track_input([input_data], variable_name="input_data", origin="environment")
+        SynthTracker.track_input([input_data], variable_name="input_data", origin="environment")
 
         result = {"processed": input_data, "timestamp": time.time()}
 
-        SynthTrackerSync.track_output(result, variable_name="result", origin="environment")
+        SynthTracker.track_output(result, variable_name="result", origin="environment")
         return result
 
 
