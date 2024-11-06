@@ -8,6 +8,6 @@ def test_string():
 
 try:
   def test_list():
-    assert len([1, 2, 3]) != 3
+    assert len([1, 2, 3]) == 3
 except Exception as e:
   print(f"Error: {str(e)}")
