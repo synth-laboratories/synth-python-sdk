@@ -6,9 +6,10 @@ import logging
 import os
 import time
 from synth_sdk.tracing.events.store import event_store
-from synth_sdk.tracing.abstractions import Dataset
+from synth_sdk.tracing.abstractions import Dataset, SystemTrace
 import json
 from pprint import pprint
+import asyncio
 
 
 def validate_json(data: dict) -> None:
@@ -26,7 +27,7 @@ def validate_json(data: dict) -> None:
     except (TypeError, OverflowError) as e:
         raise ValueError(f"Contains non-JSON-serializable values: {e}. {data}")
 
-def createPayload(dataset: Dataset, traces: str) -> Dict[str, Any]:
+def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]:
     payload = {
         "traces": [
             trace.to_dict() for trace in traces
@@ -36,8 +37,8 @@ def createPayload(dataset: Dataset, traces: str) -> Dict[str, Any]:
     return payload
 
 def send_system_traces(
-    dataset: Dataset, base_url: str, api_key: str
-) -> requests.Response:
+    dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, 
+):
     """Send all system traces and dataset metadata to the server."""
     # Get the token using the API key
     token_url = f"{base_url}/token"
@@ -46,7 +47,7 @@ def send_system_traces(
     )
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
-    traces = event_store.get_system_traces()
+
     # print("Traces: ", traces)
     # Send the traces with the token
     api_url = f"{base_url}/upload/"
@@ -169,7 +170,35 @@ def validate_upload(traces: List[Dict[str, Any]], dataset: Dict[str, Any]):
         raise ValueError(f"Upload validation failed: {str(e)}")
 
 
-async def upload(dataset: Dataset, verbose: bool = False, show_payload: bool = False):
+def is_event_loop_running():
+    try:
+        asyncio.get_running_loop()  # Check if there's a running event loop
+        return True
+    except RuntimeError:
+        # This exception is raised if no event loop is running
+        return False
+
+# Supports calls from both async and sync contexts
+def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+    async def upload_wrapper(dataset, traces, verbose, show_payload):
+        result = await upload_helper(dataset, traces, verbose, show_payload)
+        return result
+    
+    if is_event_loop_running():
+        logging.info("Event loop is already running")
+        task = asyncio.create_task(upload_wrapper(dataset, traces, verbose, show_payload))
+        # Wait for the task if called from an async function
+        if asyncio.current_task():
+            return task  # Returning the task to be awaited if in async context
+        else:
+            # Run task synchronously by waiting for it to finish if in sync context
+            return asyncio.get_event_loop().run_until_complete(task)
+        
+    else:
+        logging.info("Event loop is not running")
+        return asyncio.run(upload_wrapper(dataset, traces, verbose, show_payload))
+
+async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
     """Upload all system traces and dataset to the server."""
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
@@ -192,7 +221,7 @@ async def upload(dataset: Dataset, verbose: bool = False, show_payload: bool = F
         _local.active_events.clear()
 
     # Also close any unclosed events in existing traces
-    traces = event_store.get_system_traces()
+    traces = event_store.get_system_traces() if len(traces) == 0 else traces
     current_time = time.time()
     for trace in traces:
         for partition in trace.partition:
@@ -205,7 +234,6 @@ async def upload(dataset: Dataset, verbose: bool = False, show_payload: bool = F
 
     try:
         # Get traces and convert to dict format
-        traces = event_store.get_system_traces()
         if len(traces) == 0:
             raise ValueError("No system traces found")
         traces_dict = [trace.to_dict() for trace in traces]
@@ -221,6 +249,7 @@ async def upload(dataset: Dataset, verbose: bool = False, show_payload: bool = F
         # Send to server
         response, payload = send_system_traces(
             dataset=dataset,
+            traces=traces,
             base_url="https://agent-learning.onrender.com",
             api_key=api_key,
         )
@@ -236,7 +265,6 @@ async def upload(dataset: Dataset, verbose: bool = False, show_payload: bool = F
         if show_payload:
             print("Payload sent to server: ")
             pprint(payload)
-
         return response, payload
     except ValueError as e:
         if verbose:

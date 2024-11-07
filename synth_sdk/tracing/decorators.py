@@ -4,7 +4,6 @@ from functools import wraps
 import threading
 import time
 import logging
-import inspect
 import contextvars
 from pydantic import BaseModel
 
@@ -22,7 +21,6 @@ from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union
 from functools import wraps
 import time
 import logging
-import inspect
 from pydantic import BaseModel
 
 from synth_sdk.tracing.abstractions import (
@@ -34,6 +32,8 @@ from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.local import system_id_var, active_events_var
 from synth_sdk.tracing.trackers import synth_tracker_async
 from synth_sdk.tracing.events.manage import set_current_event
+
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -371,3 +371,35 @@ def trace_system_async(
         return async_wrapper
 
     return decorator
+
+def trace_system(
+    origin: Literal["agent", "environment"],
+    event_type: str,
+    log_result: bool = False,
+    manage_event: Literal["create", "end", "lazy_end", None] = None,
+    increment_partition: bool = False,
+    verbose: bool = False,
+) -> Callable:
+    """
+    Decorator that chooses the correct tracing method (sync or async) based on
+    whether the wrapped function is synchronous or asynchronous.
+    """
+    def decorator(func: Callable) -> Callable:
+        # Check if the function is async or sync
+        if inspect.iscoroutinefunction(func):
+            # Use async tracing
+            logger.debug("Using async tracing")
+            async_decorator = trace_system_async(
+                origin, event_type, log_result, manage_event, increment_partition, verbose
+            )
+            return async_decorator(func)
+        else:
+            # Use sync tracing
+            logger.debug("Using sync tracing")
+            sync_decorator = trace_system_sync(
+                origin, event_type, log_result, manage_event, increment_partition, verbose
+            )
+            return sync_decorator(func)
+
+    return decorator
+
