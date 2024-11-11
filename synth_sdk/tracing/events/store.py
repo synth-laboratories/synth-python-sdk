@@ -1,10 +1,12 @@
 import json
 import threading
 import logging
+import time
 from typing import Dict, List, Optional
 from synth_sdk.tracing.abstractions import SystemTrace, EventPartitionElement, Event
 from synth_sdk.tracing.config import tracer  # Update this import line
 from threading import RLock  # Change this import
+from synth_sdk.tracing.local import _local, system_id_var, active_events_var  # Import context variables
 
 
 logger = logging.getLogger(__name__)
@@ -76,49 +78,84 @@ class EventStore:
         self.logger.debug(
             f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
         )
+        print("Adding event to partition")
+
+        #try:
+        if not self._lock.acquire(timeout=5):
+            self.logger.error("Failed to acquire lock within timeout period")
+            return
 
         try:
-            if not self._lock.acquire(timeout=5):
-                self.logger.error("Failed to acquire lock within timeout period")
-                return
+            system_trace = self.get_or_create_system_trace(system_id)
+            self.logger.debug(
+                f"Got system trace with {len(system_trace.partition)} partitions"
+            )
 
-            try:
-                system_trace = self.get_or_create_system_trace(system_id)
-                self.logger.debug(
-                    f"Got system trace with {len(system_trace.partition)} partitions"
+            current_partition = next(
+                (
+                    p
+                    for p in system_trace.partition
+                    if p.partition_index == event.partition_index
+                ),
+                None,
+            )
+
+            if current_partition is None:
+                self.logger.error(
+                    f"No partition found for index {event.partition_index} - existing partitions: {set([p.partition_index for p in system_trace.partition])}"
+                )
+                raise ValueError(
+                    f"No partition found for index {event.partition_index}"
                 )
 
-                current_partition = next(
-                    (
-                        p
-                        for p in system_trace.partition
-                        if p.partition_index == event.partition_index
-                    ),
-                    None,
-                )
-
-                if current_partition is None:
-                    self.logger.error(
-                        f"No partition found for index {event.partition_index} - existing partitions: {set([p.partition_index for p in system_trace.partition])}"
-                    )
-                    raise ValueError(
-                        f"No partition found for index {event.partition_index}"
-                    )
-
-                current_partition.events.append(event)
-                self.logger.debug(
-                    f"Added event to partition {event.partition_index}. Total events: {len(current_partition.events)}"
-                )
-            finally:
-                self._lock.release()
-        except Exception as e:
-            self.logger.error(f"Error in add_event: {str(e)}", exc_info=True)
-            raise
+            
+            current_partition.events.append(event)
+            self.logger.debug(
+                f"Added event to partition {event.partition_index}. Total events: {len(current_partition.events)}"
+            )
+        finally:
+            self._lock.release()
+        # except Exception as e:
+        #     self.logger.error(f"Error in add_event: {str(e)}", exc_info=True)
+        #     raise
 
     def get_system_traces(self) -> List[SystemTrace]:
         """Get all system traces."""
         with self._lock:
+            self.end_all_active_events()
+                
             return list(self._traces.values())
+
+    def end_all_active_events(self):
+        """End all active events and store them."""
+        self.logger.debug("Ending all active events")
+        
+        # For synchronous code
+        if hasattr(_local, "active_events"):
+            active_events = _local.active_events
+            system_id = getattr(_local, "system_id", None)
+            if active_events:# and system_id:
+                for event_type, event in list(active_events.items()):
+                    if event.closed is None:
+                        event.closed = time.time()
+                        self.add_event(event.system_id, event)
+                        self.logger.debug(f"Stored and closed event {event_type}")
+                _local.active_events.clear()
+
+        # For asynchronous code
+        active_events_async = active_events_var.get()
+        # Use preserved system ID if available, otherwise try to get from context
+        # system_id_async = preserved_system_id or system_id_var.get(None)
+        # print("System ID async: ", system_id_async)
+        # raise ValueError("Test error")
+        
+        if active_events_async:# and system_id_async:
+            for event_type, event in list(active_events_async.items()):
+                if event.closed is None:
+                    event.closed = time.time()
+                    self.add_event(event.system_id, event)
+                    self.logger.debug(f"Stored and closed event {event_type}")
+            active_events_var.set({})
 
     def get_system_traces_json(self) -> str:
         """Get all system traces as JSON."""

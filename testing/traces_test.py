@@ -4,7 +4,10 @@ from synth_sdk.tracing.trackers import SynthTracker
 from synth_sdk.tracing.upload import upload
 from synth_sdk.tracing.upload import validate_json
 from synth_sdk.tracing.upload import createPayload
-from synth_sdk.tracing.abstractions import TrainingQuestion, RewardSignal, Dataset, SystemTrace, EventPartitionElement
+from synth_sdk.tracing.abstractions import (
+    TrainingQuestion, RewardSignal, Dataset, SystemTrace, EventPartitionElement,
+    MessageInputs, MessageOutputs, ArbitraryInputs, ArbitraryOutputs
+)
 from synth_sdk.tracing.events.store import event_store
 from typing import Dict, List
 import asyncio
@@ -104,8 +107,8 @@ class TestAgent:
     def __init__(self):
         self.system_id = "test_agent_upload"
         logger.debug("Initializing TestAgent with system_id: %s", self.system_id)
-        #self.lm = LM(model_name="gpt-4o-mini-2024-07-18", formatting_model_name="gpt-4o-mini-2024-07-18", temperature=1,)
         self.lm = MagicMock()
+        self.lm.model_name = "gpt-4o-mini-2024-07-18"
         self.lm.respond_sync.return_value = mock_llm_response
         logger.debug("LM initialized")
 
@@ -116,18 +119,30 @@ class TestAgent:
         increment_partition=True,
         verbose=False,
     )
-    def make_lm_call(self, user_message: str) -> str: # Calls an LLM to respond to a user message
-        # Only pass the user message, not self
-        SynthTracker.track_input([user_message], variable_name="user_message", origin="agent")
+    def make_lm_call(self, user_message: str) -> str:
+        # Create MessageInputs
+        message_input = MessageInputs(messages=[{"role": "user", "content": user_message}])
+        SynthTracker.track_lm(
+            messages=message_input.messages,
+            model_name=self.lm.model_name,
+            finetune=False
+        )
 
         logger.debug("Starting LM call with message: %s", user_message)
         response = self.lm.respond_sync(
             system_message="You are a helpful assistant.", user_message=user_message
         )
-        SynthTracker.track_output(response, variable_name="response", origin="agent")
+
+        # Create MessageOutputs
+        message_output = MessageOutputs(messages=[{"role": "assistant", "content": response}])
+        SynthTracker.track_state(
+            variable_name="response",
+            variable_value=message_output.messages,
+            origin="agent",
+            annotation="LLM response"
+        )
 
         logger.debug("LM response received: %s", response)
-        #time.sleep(0.1)
         return response
 
     @trace_system(
@@ -137,10 +152,25 @@ class TestAgent:
         verbose=False,
     )
     def process_environment(self, input_data: str) -> dict:
-        # Only pass the input data, not self
-        SynthTracker.track_input([input_data], variable_name="input_data", origin="environment")
+        # Create ArbitraryInputs
+        arbitrary_input = ArbitraryInputs(inputs={"input_data": input_data})
+        SynthTracker.track_state(
+            variable_name="input_data",
+            variable_value=arbitrary_input.inputs,
+            origin="environment",
+            annotation="Environment input data"
+        )
+
         result = {"processed": input_data, "timestamp": time.time()}
-        SynthTracker.track_output(result, variable_name="result", origin="environment")
+
+        # Create ArbitraryOutputs
+        arbitrary_output = ArbitraryOutputs(outputs=result)
+        SynthTracker.track_state(
+            variable_name="result",
+            variable_value=arbitrary_output.outputs,
+            origin="environment",
+            annotation="Environment processing result"
+        )
         return result
 
 

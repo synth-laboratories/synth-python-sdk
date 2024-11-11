@@ -38,14 +38,25 @@ class TestAgent:
     )
     async def make_lm_call(self, user_message: str) -> str:
         # Only pass the user message, not self
-        SynthTracker.track_input([user_message], variable_name="user_message", origin="agent")
+        #SynthTracker.track_input([user_message], variable_name="user_message", origin="agent")
 
         logger.debug("Starting LM call with message: %s", user_message)
         response = await self.lm.respond_async(
             system_message="You are a helpful assistant.", user_message=user_message
         )
+        SynthTracker.track_lm(
+            messages = [{"role": "user", "content": user_message}, {"role": "assistant", "content": response}],
+            model_name = self.lm.model_name,
+            finetune = False
+        )
+        SynthTracker.track_state(
+            variable_name = "minecraft_screen_description",
+            variable_value = None,
+            origin = "environment",
+            annotation = "Minecraft screen description"
+        )
 
-        SynthTracker.track_output(response, variable_name="response", origin="agent")
+        #SynthTracker.track_output(response, variable_name="response", origin="agent")
 
         logger.debug("LM response received: %s", response)
         time.sleep(0.1)
@@ -59,11 +70,20 @@ class TestAgent:
     )
     async def process_environment(self, input_data: str) -> dict:
         # Only pass the input data, not self
-        SynthTracker.track_input([input_data], variable_name="input_data", origin="environment")
+        SynthTracker.track_state(
+            variable_name="input_data",
+            variable_value=input_data,
+            origin="environment",
+            annotation=None  # Optional: you can add an annotation if needed
+        )
 
         result = {"processed": input_data, "timestamp": time.time()}
 
-        SynthTracker.track_output(result, variable_name="result", origin="environment")
+        SynthTracker.track_state(
+            variable_name="result",
+            variable_value=result,
+            origin="environment"
+        )
         return result
 
 

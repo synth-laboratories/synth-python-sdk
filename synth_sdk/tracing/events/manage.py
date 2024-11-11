@@ -32,35 +32,71 @@ def set_current_event(event: Optional["Event"]):
 
     logger.debug(f"Setting current event of type {event.event_type}")
 
-    if not hasattr(_local, "active_events"):
-        _local.active_events = {}
-        logger.debug("Initialized active_events in thread local storage")
+    # Check if we're in an async context
+    try:
+        import asyncio
+        asyncio.get_running_loop()
+        is_async = True
+    except RuntimeError:
+        is_async = False
 
-    # If there's an existing event of the same type, end it
-    if event.event_type in _local.active_events:
-        logger.debug(f"Found existing event of type {event.event_type}")
-        existing_event = _local.active_events[event.event_type]
-        existing_event.closed = time.time()
-        logger.debug(
-            f"Closed existing event of type {event.event_type} at {existing_event.closed}"
-        )
+    if is_async:
+        from synth_sdk.tracing.local import active_events_var, system_id_var
+        # Get current active events from context var
+        active_events = active_events_var.get()
+        
+        # If there's an existing event of the same type, end it
+        if event.event_type in active_events:
+            logger.debug(f"Found existing event of type {event.event_type}")
+            existing_event = active_events[event.event_type]
+            existing_event.closed = time.time()
+            logger.debug(
+                f"Closed existing event of type {event.event_type} at {existing_event.closed}"
+            )
 
-        # Store the closed event if system_id is present
-        if hasattr(_local, "system_id"):
-            logger.debug(f"Storing closed event for system {_local.system_id}")
-            try:
-                event_store.add_event(_local.system_id, existing_event)
-                logger.debug("Successfully stored closed event")
-            except Exception as e:
-                logger.error(f"Failed to store closed event: {str(e)}")
-                raise
+            # Store the closed event if system_id is present
+            system_id = system_id_var.get()
+            if system_id:
+                logger.debug(f"Storing closed event for system {system_id}")
+                try:
+                    event_store.add_event(system_id, existing_event)
+                    logger.debug("Successfully stored closed event")
+                except Exception as e:
+                    logger.error(f"Failed to store closed event: {str(e)}")
+                    raise
 
+        # Set the new event
+        active_events[event.event_type] = event
+        active_events_var.set(active_events)
+        logger.debug("New event set as current in context vars")
     else:
-        logger.debug(f"No existing event of type {event.event_type}")
+        # Original thread-local storage logic
+        if not hasattr(_local, "active_events"):
+            _local.active_events = {}
+            logger.debug("Initialized active_events in thread local storage")
 
-    # Set the new event
-    _local.active_events[event.event_type] = event
-    logger.debug("New event set as current")
+        # If there's an existing event of the same type, end it
+        if event.event_type in _local.active_events:
+            logger.debug(f"Found existing event of type {event.event_type}")
+            existing_event = _local.active_events[event.event_type]
+            existing_event.closed = time.time()
+            logger.debug(
+                f"Closed existing event of type {event.event_type} at {existing_event.closed}"
+            )
+
+            # Store the closed event if system_id is present
+            if hasattr(_local, "system_id"):
+                logger.debug(f"Storing closed event for system {_local.system_id}")
+                try:
+                    event_store.add_event(_local.system_id, existing_event)
+                    logger.debug("Successfully stored closed event")
+                except Exception as e:
+                    logger.error(f"Failed to store closed event: {str(e)}")
+                    raise
+
+        # Set the new event
+        _local.active_events[event.event_type] = event
+        logger.debug("New event set as current in thread local")
 
 
 def clear_current_event(event_type: str):

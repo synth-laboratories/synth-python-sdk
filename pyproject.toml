@@ -18,6 +18,8 @@ dependencies = [
     "twine>=4.0.0",
     "keyring>=24.0.0",
     "python-dotenv>=1.0.1",
+    "langfuse>=2.53.9",
+    "pytest>=8.3.3",
 ]
 classifiers = []
 

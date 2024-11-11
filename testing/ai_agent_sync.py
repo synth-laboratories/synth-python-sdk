@@ -37,15 +37,26 @@ class TestAgent:
         verbose=True,
     )
     def make_lm_call(self, user_message: str) -> str:
-        # Only pass the user message, not self
-        SynthTracker.track_input([user_message], variable_name="user_message", origin="agent")
-
         logger.debug("Starting LM call with message: %s", user_message)
         response = self.lm.respond_sync(
             system_message="You are a helpful assistant.", user_message=user_message
         )
-
-        SynthTracker.track_output(response, variable_name="response", origin="agent")
+        
+        # Track LM interaction
+        SynthTracker.track_lm(
+            messages=[{"role": "user", "content": user_message}, 
+                     {"role": "assistant", "content": response}],
+            model_name=self.lm.model_name,
+            finetune=False
+        )
+        
+        # Track additional state if needed
+        SynthTracker.track_state(
+            variable_name="minecraft_screen_description",
+            variable_value=None,
+            origin="environment",
+            annotation="Minecraft screen description"
+        )
 
         logger.debug("LM response received: %s", response)
         time.sleep(0.1)
@@ -58,22 +69,30 @@ class TestAgent:
         verbose=True,
     )
     def process_environment(self, input_data: str) -> dict:
-        # Only pass the input data, not self
-        SynthTracker.track_input([input_data], variable_name="input_data", origin="environment")
+        # Track input state
+        SynthTracker.track_state(
+            variable_name="input_data",
+            variable_value=input_data,
+            origin="environment",
+            annotation=None
+        )
 
         result = {"processed": input_data, "timestamp": time.time()}
 
-        SynthTracker.track_output(result, variable_name="result", origin="environment")
+        # Track result state
+        SynthTracker.track_state(
+            variable_name="result",
+            variable_value=result,
+            origin="environment"
+        )
         return result
 
 
 async def run_test():
     logger.info("Starting run_test")
-    # Create test agent
     agent = TestAgent()
 
     try:
-        # List of test questions
         questions = [
             "What's the capital of France?",
             "What's 2+2?",
@@ -81,16 +100,13 @@ async def run_test():
         ]
         logger.debug("Test questions initialized: %s", questions)
 
-        # Make multiple LM calls with environment processing
         responses = []
         for i, question in enumerate(questions):
             logger.info("Processing question %d: %s", i, question)
             try:
-                # First process in environment
                 env_result = agent.process_environment(question)
                 logger.debug("Environment processing result: %s", env_result)
 
-                # Then make LM call
                 response = agent.make_lm_call(question)
                 responses.append(response)
                 logger.debug("Response received and stored: %s", response)
@@ -168,6 +184,7 @@ async def run_test():
                                 f"Error during cleanup of event {event_type}: {str(e)}"
                             )
         logger.info("Cleanup completed")
+
 
 # Run a sample agent using the sync decorator and tracker
 if __name__ == "__main__":

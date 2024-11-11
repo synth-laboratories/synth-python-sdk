@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, List, Dict, Optional, Union
+from typing import Any, List, Dict, Optional, Union, Literal
 from pydantic import BaseModel
 import logging
 from synth_sdk.tracing.config import VALID_TYPES
@@ -8,32 +8,53 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class MessageInputs:
+    messages: List[Dict[str, str]]  # {"role": "", "content": ""}
+
+
+@dataclass
+class ArbitraryInputs:
+    inputs: Dict[str, Any]
+
+
+@dataclass
+class MessageOutputs:
+    messages: List[Dict[str, str]]
+
+
+@dataclass
+class ArbitraryOutputs:
+    outputs: Dict[str, Any]
+
+
+@dataclass
 class ComputeStep:
     event_order: int
-    compute_ended: Any  # time step
-    compute_began: Any  # time step
-    compute_input: Dict[str, Any]  # {variable_name: value}
-    compute_output: Dict[str, Any]  # {variable_name: value}
+    compute_ended: Any  # timestamp
+    compute_began: Any  # timestamp
+    compute_input: List[Any]
+    compute_output: List[Any]
 
     def to_dict(self):
-        # Define serializable types
-        #serializable_types = (str, int, float, bool, list, dict, type(None))
+        # Serialize compute_input
+        serializable_input = [
+            input_item.__dict__ for input_item in self.compute_input
+            if isinstance(input_item, (MessageInputs, ArbitraryInputs))
+        ]
 
-        # Filter compute_input
-        serializable_input = {}
-        for name, value in self.compute_input.items():
-            if isinstance(value, VALID_TYPES):
-                serializable_input[name] = value
-            else:
-                logger.warning(f"Skipping non-serializable input: {name}={value}")
+        # Serialize compute_output
+        serializable_output = [
+            output_item.__dict__ for output_item in self.compute_output
+            if isinstance(output_item, (MessageOutputs, ArbitraryOutputs))
+        ]
 
-        # Filter compute_output
-        serializable_output = {}
-        for name, value in self.compute_output.items():
-            if isinstance(value, VALID_TYPES):
-                serializable_output[name] = value
-            else:
-                logger.warning(f"Skipping non-serializable output: {name}={value}")
+        # Warn about non-serializable inputs/outputs
+        for item in self.compute_input:
+            if not isinstance(item, (MessageInputs, ArbitraryInputs)):
+                logger.warning(f"Skipping non-serializable input: {item}")
+        for item in self.compute_output:
+            if not isinstance(item, (MessageOutputs, ArbitraryOutputs)):
+                logger.warning(f"Skipping non-serializable output: {item}")
 
         return {
             "event_order": self.event_order,
@@ -44,20 +65,26 @@ class ComputeStep:
         }
 
 
+@dataclass
 class AgentComputeStep(ComputeStep):
-    pass
+    model_name: Optional[str] = None
+    compute_input: List[Union[MessageInputs, ArbitraryInputs]]
+    compute_output: List[Union[MessageOutputs, ArbitraryOutputs]]
 
 
+@dataclass
 class EnvironmentComputeStep(ComputeStep):
-    pass
+    compute_input: List[ArbitraryInputs]
+    compute_output: List[ArbitraryOutputs]
 
 
 @dataclass
 class Event:
+    system_id: str
     event_type: str
-    opened: Any  # time stamp
-    closed: Any  # time stamp
-    partition_index: int  # New field
+    opened: Any  # timestamp
+    closed: Any  # timestamp
+    partition_index: int
     agent_compute_steps: List[AgentComputeStep]
     environment_compute_steps: List[EnvironmentComputeStep]
 

@@ -1,5 +1,5 @@
 # synth_sdk/tracing/decorators.py
-from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union
+from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union, List
 from functools import wraps
 import threading
 import time
@@ -14,7 +14,7 @@ from synth_sdk.tracing.abstractions import (
 )
 from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.local import _local, logger
-from synth_sdk.tracing.trackers import synth_tracker_sync, synth_tracker_async
+from synth_sdk.tracing.trackers import synth_tracker_sync, synth_tracker_async, SynthTracker
 from synth_sdk.tracing.events.manage import set_current_event
 
 from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union
@@ -24,6 +24,10 @@ import logging
 from pydantic import BaseModel
 
 from synth_sdk.tracing.abstractions import (
+    ArbitraryInputs,
+    ArbitraryOutputs,
+    MessageInputs,
+    MessageOutputs,
     Event,
     AgentComputeStep,
     EnvironmentComputeStep,
@@ -45,6 +49,7 @@ def trace_system_sync(
     manage_event: Literal["create", "end", "lazy_end", None] = None,
     increment_partition: bool = False,
     verbose: bool = False,
+    finetune_step: bool = True,
 ) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -79,6 +84,7 @@ def trace_system_sync(
                 if manage_event == "create":
                     logger.debug("Creating new event")
                     event = Event(
+                        system_id=_local.system_id,
                         event_type=event_type,
                         opened=compute_began,
                         closed=None,
@@ -103,30 +109,69 @@ def trace_system_sync(
                 for param, value in bound_args.arguments.items():
                     if param == "self":
                         continue
-                    synth_tracker_sync.track_input(value, param, origin)
+                    synth_tracker_sync.track_state(
+                        variable_name=param,
+                        variable_value=value,
+                        origin=origin
+                    )
 
                 # Execute the function
                 result = func(*args, **kwargs)
 
                 # Automatically trace function output
-                if log_result:
-                    synth_tracker_sync.track_output(result, "result", origin)
+                synth_tracker_sync.track_state(
+                    variable_name="result",
+                    variable_value=result,
+                    origin=origin
+                )
 
                 # Collect traced inputs and outputs
                 traced_inputs, traced_outputs = synth_tracker_sync.get_traced_data()
 
                 compute_steps_by_origin: Dict[
-                    Literal["agent", "environment"], Dict[str, Dict[str, Any]]
+                    Literal["agent", "environment"], Dict[str, List[Any]]
                 ] = {
-                    "agent": {"inputs": {}, "outputs": {}},
-                    "environment": {"inputs": {}, "outputs": {}},
+                    "agent": {"inputs": [], "outputs": []},
+                    "environment": {"inputs": [], "outputs": []},
                 }
 
                 # Organize traced data by origin
-                for var_origin, var, var_name, _ in traced_inputs:
-                    compute_steps_by_origin[var_origin]["inputs"][var_name] = var
-                for var_origin, var, var_name, _ in traced_outputs:
-                    compute_steps_by_origin[var_origin]["outputs"][var_name] = var
+                for item in traced_inputs:
+                    var_origin = item['origin']
+                    if 'variable_value' in item and 'variable_name' in item:
+                        # Standard variable input
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            ArbitraryInputs(inputs={item['variable_name']: item['variable_value']})
+                        )
+                    elif 'messages' in item:
+                        # Message input from track_lm
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            MessageInputs(messages=item['messages'])
+                        )
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            ArbitraryInputs(inputs={"model_name": item["model_name"]})
+                        )
+                        finetune = item["finetune"] or finetune_step
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            ArbitraryInputs(inputs={"finetune": finetune})
+                        )
+                    else:
+                        logger.warning(f"Unhandled traced input item: {item}")
+
+                for item in traced_outputs:
+                    var_origin = item['origin']
+                    if 'variable_value' in item and 'variable_name' in item:
+                        # Standard variable output
+                        compute_steps_by_origin[var_origin]["outputs"].append(
+                            ArbitraryOutputs(outputs={item['variable_name']: item['variable_value']})
+                        )
+                    elif 'messages' in item:
+                        # Message output from track_lm
+                        compute_steps_by_origin[var_origin]["outputs"].append(
+                            MessageOutputs(messages=item['messages'])
+                        )
+                    else:
+                        logger.warning(f"Unhandled traced output item: {item}")
 
                 # Capture compute end time
                 compute_ended = time.time()
@@ -209,6 +254,7 @@ def trace_system_async(
     manage_event: Literal["create", "end", "lazy_end", None] = None,
     increment_partition: bool = False,
     verbose: bool = False,
+    finetune_step: bool = True,
 ) -> Callable:
     """Decorator for tracing asynchronous functions."""
 
@@ -247,6 +293,7 @@ def trace_system_async(
                 if manage_event == "create":
                     logger.debug("Creating new event")
                     event = Event(
+                        system_id=self_instance.system_id,
                         event_type=event_type,
                         opened=compute_began,
                         closed=None,
@@ -271,31 +318,73 @@ def trace_system_async(
                 for param, value in bound_args.arguments.items():
                     if param == "self":
                         continue
-                    synth_tracker_async.track_input(value, param, origin)
+                    synth_tracker_async.track_state(
+                        variable_name=param,
+                        variable_value=value,
+                        origin=origin,
+                        io_type="input"
+                    )
 
                 # Execute the coroutine
                 result = await func(*args, **kwargs)
 
                 # Automatically trace function output
-                if log_result:
-                    synth_tracker_async.track_output(result, "result", origin)
+                synth_tracker_async.track_state(
+                    variable_name="result",
+                    variable_value=result,
+                    origin=origin,
+                    io_type="output"
+                )
 
                 # Collect traced inputs and outputs
                 traced_inputs, traced_outputs = synth_tracker_async.get_traced_data()
 
                 compute_steps_by_origin: Dict[
-                    Literal["agent", "environment"], Dict[str, Dict[str, Any]]
+                    Literal["agent", "environment"], Dict[str, List[Any]]
                 ] = {
-                    "agent": {"inputs": {}, "outputs": {}},
-                    "environment": {"inputs": {}, "outputs": {}},
+                    "agent": {"inputs": [], "outputs": []},
+                    "environment": {"inputs": [], "outputs": []},
                 }
 
                 # Organize traced data by origin
-                for var_origin, var, var_name, _ in traced_inputs:
-                    compute_steps_by_origin[var_origin]["inputs"][var_name] = var
-                for var_origin, var, var_name, _ in traced_outputs:
-                    compute_steps_by_origin[var_origin]["outputs"][var_name] = var
+                for item in traced_inputs:
+                    var_origin = item['origin']
+                    if 'variable_value' in item and 'variable_name' in item:
+                        # Standard variable input
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            ArbitraryInputs(inputs={item['variable_name']: item['variable_value']})
+                        )
+                    elif 'messages' in item:
+                        # Message input from track_lm
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            MessageInputs(messages=item['messages'])
+                        )
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            ArbitraryInputs(inputs={"model_name": item["model_name"]})
+                        )
+                        finetune = finetune_step or item["finetune"]
+                        compute_steps_by_origin[var_origin]["inputs"].append(
+                            ArbitraryInputs(inputs={"finetune": finetune})
+                        )
+                    else:
+                        logger.warning(f"Unhandled traced input item: {item}")
 
+                for item in traced_outputs:
+                    var_origin = item['origin']
+                    if 'variable_value' in item and 'variable_name' in item:
+                        # Standard variable output
+                        compute_steps_by_origin[var_origin]["outputs"].append(
+                            ArbitraryOutputs(outputs={item['variable_name']: item['variable_value']})
+                        )
+                    elif 'messages' in item:
+                        # Message output from track_lm
+                        compute_steps_by_origin[var_origin]["outputs"].append(
+                            MessageOutputs(messages=item['messages'])
+                        )
+                    else:
+                        logger.warning(f"Unhandled traced output item: {item}")
+
+                print("COMPUTE STEPS BY ORIGIN", compute_steps_by_origin)
                 # Capture compute end time
                 compute_ended = time.time()
 
@@ -337,6 +426,7 @@ def trace_system_async(
                             f"Added compute step for {var_origin}: {compute_step.to_dict()}"
                         )
 
+                print("EVENT", event)
                 # Optionally log the function result
                 if log_result:
                     logger.info(f"Function result: {result}")
