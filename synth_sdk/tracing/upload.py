@@ -221,7 +221,9 @@ async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose:
         _local.active_events.clear()
 
     # Also close any unclosed events in existing traces
-    traces = event_store.get_system_traces() if len(traces) == 0 else traces
+    logged_traces = event_store.get_system_traces()
+    traces = logged_traces+ traces
+    #traces = event_store.get_system_traces() if len(traces) == 0 else traces
     current_time = time.time()
     for trace in traces:
         for partition in trace.partition:
