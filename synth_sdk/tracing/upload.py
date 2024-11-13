@@ -41,7 +41,7 @@ def send_system_traces(
 ):
     """Send all system traces and dataset metadata to the server."""
     # Get the token using the API key
-    token_url = f"{base_url}/token"
+    token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
         token_url, headers={"customer_specific_api_key": api_key}
     )
@@ -50,7 +50,7 @@ def send_system_traces(
 
     # print("Traces: ", traces)
     # Send the traces with the token
-    api_url = f"{base_url}/upload/"
+    api_url = f"{base_url}/v1/uploads/"
 
     payload = createPayload(dataset, traces) # Create the payload
 
@@ -267,7 +267,7 @@ async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose:
         if show_payload:
             print("Payload sent to server: ")
             pprint(payload)
-        return response, payload
+        return response, payload, dataset, traces
     except ValueError as e:
         if verbose:
             print("Validation error:", str(e))
