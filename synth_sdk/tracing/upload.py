@@ -48,7 +48,6 @@ def send_system_traces(
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    # print("Traces: ", traces)
     # Send the traces with the token
     api_url = f"{base_url}/v1/uploads/"
 
