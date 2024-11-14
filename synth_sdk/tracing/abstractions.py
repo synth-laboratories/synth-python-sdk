@@ -65,8 +65,8 @@ class Event:
     def to_dict(self):
         return {
             "event_type": self.event_type,
-            "opened": self.opened,
-            "closed": self.closed,
+            "opened": self.opened.isoformat() if isinstance(self.opened, datetime) else self.opened,
+            "closed": self.closed.isoformat() if isinstance(self.closed, datetime) else self.closed,
             "partition_index": self.partition_index,
             "agent_compute_steps": [
                 step.to_dict() for step in self.agent_compute_steps
