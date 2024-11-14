@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="synth-sdk",
-    version="0.2.64",
+    version="0.2.65",
     packages=find_packages(),
     install_requires=[
         "opentelemetry-api",
