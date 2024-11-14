@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, List, Dict, Optional, Union
+from datetime import datetime
 from pydantic import BaseModel
 import logging
 from synth_sdk.tracing.config import VALID_TYPES
@@ -10,8 +11,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ComputeStep:
     event_order: int
-    compute_ended: Any  # time step
-    compute_began: Any  # time step
+    compute_ended: datetime  # time step
+    compute_began: datetime  # time step
     compute_input: Dict[str, Any]  # {variable_name: value}
     compute_output: Dict[str, Any]  # {variable_name: value}
 
@@ -37,8 +38,8 @@ class ComputeStep:
 
         return {
             "event_order": self.event_order,
-            "compute_ended": self.compute_ended,
-            "compute_began": self.compute_began,
+            "compute_ended": self.compute_ended.isoformat() if isinstance(self.compute_ended, datetime) else self.compute_ended,
+            "compute_began": self.compute_began.isoformat() if isinstance(self.compute_began, datetime) else self.compute_began,
             "compute_input": serializable_input,
             "compute_output": serializable_output,
         }
