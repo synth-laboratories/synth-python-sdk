@@ -182,20 +182,17 @@ def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False
     async def upload_wrapper(dataset, traces, verbose, show_payload):
         result = await upload_helper(dataset, traces, verbose, show_payload)
         return result
-    
+
+    # If we're in an async context (event loop is running)
     if is_event_loop_running():
         logging.info("Event loop is already running")
-        task = asyncio.create_task(upload_wrapper(dataset, traces, verbose, show_payload))
-        # Wait for the task if called from an async function
-        if asyncio.current_task():
-            return task  # Returning the task to be awaited if in async context
-        else:
-            # Run task synchronously by waiting for it to finish if in sync context
-            return asyncio.get_event_loop().run_until_complete(task)
-        
+        # Return the coroutine directly for async contexts
+        return upload_helper(dataset, traces, verbose, show_payload)
     else:
+        # In sync context, run the coroutine and return the result
         logging.info("Event loop is not running")
-        return asyncio.run(upload_wrapper(dataset, traces, verbose, show_payload))
+        return asyncio.run(upload_helper(dataset, traces, verbose, show_payload))
+
 
 async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
     """Upload all system traces and dataset to the server."""

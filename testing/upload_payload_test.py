@@ -153,7 +153,7 @@ async def test_upload_async(mock_send_system_traces):
     # Upload traces
     logger.info("Attempting to upload traces, async version")
     # TODO: uploads traces directly from list of traces (override the event_store)
-    response, payload = await upload(dataset=dataset, verbose=True, show_payload=True)
+    response, payload, dataset, traces = await upload(dataset=dataset, verbose=True, show_payload=True)
     logger.info("Upload successful!")
 
     # Pytest assertion
@@ -174,7 +174,7 @@ def test_upload_sync(mock_send_system_traces):
     # Upload traces
     logger.info("Attempting to upload traces, non-async version")
     # TODO: uploads traces directly from list of traces (override the event_store)
-    response, payload = upload(dataset=dataset, verbose=True, show_payload=True)
+    response, payload, dataset, traces = upload(dataset=dataset, verbose=True, show_payload=True)
     logger.info("Upload successful!")
 
     # Pytest assertion
