@@ -128,7 +128,7 @@ async def run_test():
         # Upload traces
         try:
             logger.info("Attempting to upload traces")
-            response, _ = await upload(dataset=dataset, verbose=True)
+            response, payload, dataset, traces= await upload(dataset=dataset, verbose=True)
             logger.info("Upload successful!")
             print("Upload successful!")
         except Exception as e:
