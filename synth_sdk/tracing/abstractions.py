@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Any, List, Dict, Optional, Union, Literal
+from typing import Any, List, Dict, Optional, Union
+from datetime import datetime
 from pydantic import BaseModel
 import logging
 from synth_sdk.tracing.config import VALID_TYPES
@@ -30,10 +31,10 @@ class ArbitraryOutputs:
 @dataclass
 class ComputeStep:
     event_order: int
-    compute_ended: Any  # timestamp
-    compute_began: Any  # timestamp
-    compute_input: List[Any]
-    compute_output: List[Any]
+    compute_ended: datetime  # time step
+    compute_began: datetime  # time step
+    compute_input: Dict[str, Any]  # {variable_name: value}
+    compute_output: Dict[str, Any]  # {variable_name: value}
 
     def to_dict(self):
         # Serialize compute_input
@@ -58,8 +59,8 @@ class ComputeStep:
 
         return {
             "event_order": self.event_order,
-            "compute_ended": self.compute_ended,
-            "compute_began": self.compute_began,
+            "compute_ended": self.compute_ended.isoformat() if isinstance(self.compute_ended, datetime) else self.compute_ended,
+            "compute_began": self.compute_began.isoformat() if isinstance(self.compute_began, datetime) else self.compute_began,
             "compute_input": serializable_input,
             "compute_output": serializable_output,
         }
@@ -91,8 +92,8 @@ class Event:
     def to_dict(self):
         return {
             "event_type": self.event_type,
-            "opened": self.opened,
-            "closed": self.closed,
+            "opened": self.opened.isoformat() if isinstance(self.opened, datetime) else self.opened,
+            "closed": self.closed.isoformat() if isinstance(self.closed, datetime) else self.closed,
             "partition_index": self.partition_index,
             "agent_compute_steps": [
                 step.to_dict() for step in self.agent_compute_steps

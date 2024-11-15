@@ -41,16 +41,15 @@ def send_system_traces(
 ):
     """Send all system traces and dataset metadata to the server."""
     # Get the token using the API key
-    token_url = f"{base_url}/token"
+    token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
         token_url, headers={"customer_specific_api_key": api_key}
     )
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    # print("Traces: ", traces)
     # Send the traces with the token
-    api_url = f"{base_url}/upload/"
+    api_url = f"{base_url}/v1/uploads/"
 
     payload = createPayload(dataset, traces) # Create the payload
 
@@ -183,20 +182,17 @@ def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False
     async def upload_wrapper(dataset, traces, verbose, show_payload):
         result = await upload_helper(dataset, traces, verbose, show_payload)
         return result
-    
+
+    # If we're in an async context (event loop is running)
     if is_event_loop_running():
         logging.info("Event loop is already running")
-        task = asyncio.create_task(upload_wrapper(dataset, traces, verbose, show_payload))
-        # Wait for the task if called from an async function
-        if asyncio.current_task():
-            return task  # Returning the task to be awaited if in async context
-        else:
-            # Run task synchronously by waiting for it to finish if in sync context
-            return asyncio.get_event_loop().run_until_complete(task)
-        
+        # Return the coroutine directly for async contexts
+        return upload_helper(dataset, traces, verbose, show_payload)
     else:
+        # In sync context, run the coroutine and return the result
         logging.info("Event loop is not running")
-        return asyncio.run(upload_wrapper(dataset, traces, verbose, show_payload))
+        return asyncio.run(upload_helper(dataset, traces, verbose, show_payload))
+
 
 async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
     """Upload all system traces and dataset to the server."""
@@ -221,7 +217,9 @@ async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose:
         _local.active_events.clear()
 
     # Also close any unclosed events in existing traces
-    traces = event_store.get_system_traces() if len(traces) == 0 else traces
+    logged_traces = event_store.get_system_traces()
+    traces = logged_traces+ traces
+    #traces = event_store.get_system_traces() if len(traces) == 0 else traces
     current_time = time.time()
     for trace in traces:
         for partition in trace.partition:
@@ -265,7 +263,7 @@ async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose:
         if show_payload:
             print("Payload sent to server: ")
             pprint(payload)
-        return response, payload
+        return response, payload, dataset, traces
     except ValueError as e:
         if verbose:
             print("Validation error:", str(e))
