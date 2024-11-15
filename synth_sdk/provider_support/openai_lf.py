@@ -28,6 +28,9 @@ except ImportError:
         "Please install OpenAI to use this feature: 'pip install openai'"
     )
 
+# CREDIT TO LANGFUSE FOR OPENSOURCING THE CODE THAT THIS IS BASED ON
+# https://langfuse.com
+
 try:
     from openai import AsyncAzureOpenAI, AsyncOpenAI, AzureOpenAI, OpenAI  # noqa: F401
 except ImportError:
