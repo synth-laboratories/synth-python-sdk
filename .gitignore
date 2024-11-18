@@ -163,3 +163,7 @@ cython_debug/
 
 # uv.lock is annoying
 uv.lock
+
+
+dev/** */
+dev
