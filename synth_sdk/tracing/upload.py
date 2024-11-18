@@ -13,15 +13,14 @@ import asyncio
 
 
 def validate_json(data: dict) -> None:
-    """
-    Validate that a dictionary contains only JSON-serializable values.
+    #Validate that a dictionary contains only JSON-serializable values.
 
-    Args:
-        data: Dictionary to validate for JSON serialization
+    #Args:
+    #    data: Dictionary to validate for JSON serialization
 
-    Raises:
-        ValueError: If the dictionary contains non-serializable values
-    """
+    #Raises:
+    #    ValueError: If the dictionary contains non-serializable values
+    
     try:
         json.dumps(data)
     except (TypeError, OverflowError) as e:
@@ -39,7 +38,7 @@ def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]
 def send_system_traces(
     dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, 
 ):
-    """Send all system traces and dataset metadata to the server."""
+    # Send all system traces and dataset metadata to the server.
     # Get the token using the API key
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
@@ -158,10 +157,8 @@ class UploadValidator(BaseModel):
 
 
 def validate_upload(traces: List[Dict[str, Any]], dataset: Dict[str, Any]):
-    """
-    Validate the upload format before sending to server.
-    Raises ValueError if validation fails.
-    """
+    #Validate the upload format before sending to server.
+    #Raises ValueError if validation fails.
     try:
         UploadValidator(traces=traces, dataset=dataset)
         return True
@@ -179,6 +176,13 @@ def is_event_loop_running():
 
 # Supports calls from both async and sync contexts
 def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+    """Upload all system traces and dataset to the server.
+    Returns a tuple of (response, payload, dataset, traces)
+    
+    Response is the response from the server.
+    Payload is the payload that was sent to the server.
+    Dataset is the dataset that was uploaded.
+    Traces is the list of traces that were tracked by the trace_system() decorators and SynthTracker."""
     async def upload_wrapper(dataset, traces, verbose, show_payload):
         result = await upload_helper(dataset, traces, verbose, show_payload)
         return result
@@ -195,7 +199,6 @@ def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False
 
 
 async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
-    """Upload all system traces and dataset to the server."""
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
         raise ValueError("SYNTH_API_KEY environment variable not set")

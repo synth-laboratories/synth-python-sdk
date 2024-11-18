@@ -51,6 +51,10 @@ def trace_system_sync(
     verbose: bool = False,
     finetune_step: bool = True,
 ) -> Callable:
+    """Decorator for tracing synchronous functions.
+    
+    Purpose is to keep track of inputs and outputs for compute steps for sync functions.
+    """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -252,7 +256,10 @@ def trace_system_async(
     verbose: bool = False,
     finetune_step: bool = True,
 ) -> Callable:
-    """Decorator for tracing asynchronous functions."""
+    """Decorator for tracing asynchronous functions.
+    
+    Purpose is to keep track of inputs and outputs for compute steps for async functions.
+    """
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -460,6 +467,8 @@ def trace_system(
     """
     Decorator that chooses the correct tracing method (sync or async) based on
     whether the wrapped function is synchronous or asynchronous.
+
+    Purpose is to keep track of inputs and outputs for compute steps for both sync and async functions.
     """
     def decorator(func: Callable) -> Callable:
         # Check if the function is async or sync
@@ -481,7 +490,7 @@ def trace_system(
     return decorator
 
 def track_result(result, tracker, origin):
-    """Helper function to track results, including tuple unpacking"""
+    # Helper function to track results, including tuple unpacking
     if isinstance(result, tuple):
         # Track each element of the tuple that matches valid types
         for i, item in enumerate(result):
