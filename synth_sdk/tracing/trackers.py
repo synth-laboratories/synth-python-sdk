@@ -1,0 +1,239 @@
+from typing import Union, Optional, Tuple, List, Dict, Literal
+import asyncio
+import threading
+import contextvars
+from pydantic import BaseModel
+from synth_sdk.tracing.local import logger, _local
+from synth_sdk.tracing.config import VALID_TYPES
+from synth_sdk.tracing.abstractions import MessageInputs, MessageOutputs
+
+# Existing SynthTrackerSync and SynthTrackerAsync classes...
+
+class SynthTrackerSync:
+    _local = _local
+
+    @classmethod
+    def initialize(cls):
+        cls._local.initialized = True
+        cls._local.inputs = []
+        cls._local.outputs = []
+
+    @classmethod
+    def track_lm(
+        cls,
+        messages: List[Dict[str, str]],
+        model_name: str,
+        finetune: bool = False,
+    ):
+        if getattr(cls._local, "initialized", False):
+            cls._local.inputs.append({
+                "origin": "agent",
+                "messages": messages,
+                "model_name": model_name,
+                "finetune": finetune,
+            })
+            logger.debug("Tracked LM interaction")
+        else:
+            raise RuntimeError(
+                "Trace not initialized. Use within a function decorated with @trace_system_sync."
+            )
+
+    @classmethod
+    def track_state(
+        cls,
+        variable_name: str,
+        variable_value: Union[BaseModel, str, dict, int, float, bool, list, None],
+        origin: Literal["agent", "environment"],
+        annotation: Optional[str] = None,
+    ):
+        if not isinstance(variable_value, VALID_TYPES):
+            raise TypeError(
+                f"Variable {variable_name} must be one of {VALID_TYPES}, got {type(variable_value)}"
+            )
+
+        if getattr(cls._local, "initialized", False):
+            if isinstance(variable_value, BaseModel):
+                variable_value = variable_value.model_dump()
+            cls._local.outputs.append({
+                "origin": origin,
+                "variable_name": variable_name,
+                "variable_value": variable_value,
+                "annotation": annotation,
+            })
+            logger.debug(f"Tracked state: {variable_name}")
+        else:
+            raise RuntimeError(
+                "Trace not initialized. Use within a function decorated with @trace_system_sync."
+            )
+
+    @classmethod
+    def get_traced_data(cls):
+        return getattr(cls._local, "inputs", []), getattr(cls._local, "outputs", [])
+
+    @classmethod
+    def finalize(cls):
+        # Clean up the thread-local storage
+        cls._local.initialized = False
+        cls._local.inputs = []
+        cls._local.outputs = []
+        logger.debug("Finalized trace data")
+
+
+# Context variables for asynchronous tracing
+trace_inputs_var = contextvars.ContextVar("trace_inputs", default=None)
+trace_outputs_var = contextvars.ContextVar("trace_outputs", default=None)
+trace_initialized_var = contextvars.ContextVar("trace_initialized", default=False)
+
+class SynthTrackerAsync:
+    @classmethod
+    def initialize(cls):
+        trace_initialized_var.set(True)
+        trace_inputs_var.set([])  # List of tuples: (origin, var)
+        trace_outputs_var.set([])  # List of tuples: (origin, var)
+        logger.debug("AsyncTrace initialized")
+
+    @classmethod
+    def track_lm(
+        cls,
+        messages: List[Dict[str, str]],
+        model_name: str,
+        finetune: bool = False,
+    ):
+        if trace_initialized_var.get():
+            trace_inputs = trace_inputs_var.get()
+            trace_inputs.append({
+                "origin": "agent",
+                "messages": messages,
+                "model_name": model_name,
+                "finetune": finetune,
+            })
+            trace_inputs_var.set(trace_inputs)
+            logger.debug("Tracked LM interaction")
+        else:
+            raise RuntimeError(
+                "Trace not initialized. Use within a function decorated with @trace_system_async."
+            )
+
+    @classmethod
+    def track_state(
+        cls,
+        variable_name: str,
+        variable_value: Union[BaseModel, str, dict, int, float, bool, list, None],
+        origin: Literal["agent", "environment"],
+        annotation: Optional[str] = None,
+        io_type: Literal["input", "output"] = "output",
+    ):
+        if not isinstance(variable_value, VALID_TYPES):
+            raise TypeError(
+                f"Variable {variable_name} must be one of {VALID_TYPES}, got {type(variable_value)}"
+            )
+
+        if trace_initialized_var.get():
+            if isinstance(variable_value, BaseModel):
+                variable_value = variable_value.model_dump()
+            trace_outputs = trace_outputs_var.get()
+            if io_type == "input":
+                trace_inputs = trace_inputs_var.get()
+                trace_inputs.append({
+                    "origin": origin,
+                    "variable_name": variable_name,
+                    "variable_value": variable_value,
+                    "annotation": annotation,
+                })
+                trace_inputs_var.set(trace_inputs)
+            else:
+                trace_outputs.append({
+                    "origin": origin,
+                    "variable_name": variable_name,
+                    "variable_value": variable_value,
+                    "annotation": annotation,
+                })
+                trace_outputs_var.set(trace_outputs)
+            logger.debug(f"Tracked state: {variable_name}")
+        else:
+            raise RuntimeError(
+                "Trace not initialized. Use within a function decorated with @trace_system_async."
+            )
+
+    @classmethod
+    def get_traced_data(cls):
+        traced_inputs = trace_inputs_var.get()
+        traced_outputs = trace_outputs_var.get()
+        return traced_inputs, traced_outputs
+
+    @classmethod
+    def finalize(cls):
+        trace_initialized_var.set(False)
+        trace_inputs_var.set([])
+        trace_outputs_var.set([])
+        logger.debug("Finalized async trace data")
+
+
+# Make traces available globally
+synth_tracker_sync = SynthTrackerSync
+synth_tracker_async = SynthTrackerAsync
+
+class SynthTracker:
+    @classmethod
+    def is_called_by_async(cls):
+        try:
+            asyncio.get_running_loop()  # Attempt to get the running event loop
+            return True  # If successful, we are in an async context
+        except RuntimeError:
+            return False  # If there's no running event loop, we are in a sync context
+
+    @classmethod
+    def track_lm(
+        cls,
+        messages: List[Dict[str, str]],
+        model_name: str,
+        finetune: bool = False,
+    ):
+        if cls.is_called_by_async() and trace_initialized_var.get():
+            logger.debug("Using async tracker to track LM")
+            synth_tracker_async.track_lm(messages, model_name, finetune)
+        elif getattr(synth_tracker_sync._local, "initialized", False):
+            logger.debug("Using sync tracker to track LM")
+            synth_tracker_sync.track_lm(messages, model_name, finetune)
+        else:
+            raise RuntimeError("Trace not initialized in track_lm.")
+
+    @classmethod
+    def track_state(
+        cls,
+        variable_name: str,
+        variable_value: Union[BaseModel, str, dict, int, float, bool, list, None],
+        origin: Literal["agent", "environment"],
+        annotation: Optional[str] = None,
+    ):
+        if cls.is_called_by_async() and trace_initialized_var.get():
+            logger.debug("Using async tracker to track state")
+            synth_tracker_async.track_state(variable_name, variable_value, origin, annotation)
+        elif getattr(synth_tracker_sync._local, "initialized", False):
+            logger.debug("Using sync tracker to track state")
+            synth_tracker_sync.track_state(variable_name, variable_value, origin, annotation)
+        else:
+            raise RuntimeError("Trace not initialized in track_state.")
+
+    @classmethod
+    def get_traced_data(
+        cls,
+        async_sync: Literal["async", "sync", ""] = "",  # Force only async or sync data to be returned
+    ) -> Tuple[list, list]:
+        traced_inputs, traced_outputs = [], []
+
+        if async_sync in ["async", ""]:
+            logger.debug("Getting traced data from async tracker")
+            traced_inputs_async, traced_outputs_async = synth_tracker_async.get_traced_data()
+            traced_inputs.extend(traced_inputs_async)
+            traced_outputs.extend(traced_outputs_async)
+
+        if async_sync in ["sync", ""]:
+            logger.debug("Getting traced data from sync tracker")
+            traced_inputs_sync, traced_outputs_sync = synth_tracker_sync.get_traced_data()
+            traced_inputs.extend(traced_inputs_sync)
+            traced_outputs.extend(traced_outputs_sync)
+
+        # TODO: Test that the order of the inputs and outputs is correct wrt 
+        # the order of events since we are combining the two trackers
+        return traced_inputs, traced_outputs

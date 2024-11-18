@@ -1,0 +1,56 @@
+name: GitHub Actions CICD Testing Pipeline
+run-name: ${{ github.actor }} pushed to ${{ github.ref }}
+on: [push]
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+          
+      - name: Set up Pythonc
+        uses: actions/setup-python@v4
+        with: 
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip 
+          pip install -r requirements.txt
+
+      - name: Install Local Version of synth_sdk
+        run: |
+          pip install -e .
+        
+      - name: Find Tests
+        id: find_tests
+        run: |
+          # Find all files in the 'testing' directory and join them into a space-separated string
+          # NOTE: Only run pytests on files that end with '_test.py'
+          TEST_SCRIPTS=$(find testing -type f -name '*_test.py' -print | tr '\n' ' ')
+          echo "Found test scripts: $TEST_SCRIPTS"
+          echo "TEST_SCRIPTS=$TEST_SCRIPTS" >> $GITHUB_ENV
+        env:
+          SYNTH_API_KEY: ${{ secrets.SYNTH_API_KEY }}
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DUMMY_SECRET: ${{ secrets.DUMMY_SECRET }}
+      - name: Run Tests
+        run: |
+          # Execute test scripts listed in the TEST_SCRIPTS variable
+          echo "Running tests: $TEST_SCRIPTS"
+          for script in $TEST_SCRIPTS; do
+            echo "Running test $script"
+            pytest --log-level=WARNING $script
+          done
+        env:
+          SYNTH_API_KEY: ${{ secrets.SYNTH_API_KEY }}
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DUMMY_SECRET: ${{ secrets.DUMMY_SECRET }}
+
+
+
+
