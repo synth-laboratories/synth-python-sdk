@@ -1,0 +1,149 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Synth SDK",
+    "version": "0.2.74",
+    "description": "SDK for tracing and evaluating AI system behavior"
+  },
+  "servers": [
+    {
+      "url": "https://api.usesynth.ai"
+    }
+  ],
+  "paths": {
+    "/trace": {
+      "post": {
+        "summary": "Trace system execution",
+        "description": "Decorator for tracing method execution in an AI system",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "environment"
+              ]
+            },
+            "description": "Source of the computation (AI/model operations or external system operations)"
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Type of event being traced (e.g., inference, training)"
+          },
+          {
+            "name": "manage_event",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "create",
+                "end",
+                null
+              ]
+            },
+            "description": "Controls the lifecycle of the event"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully traced execution"
+          }
+        }
+      }
+    },
+    "/track/lm": {
+      "post": {
+        "summary": "Track language model interaction",
+        "parameters": [
+          {
+            "name": "messages",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "name": "model_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/track/state": {
+      "post": {
+        "summary": "Track state changes",
+        "parameters": [
+          {
+            "name": "variable_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variable_value",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object"
+                },
+                {
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "environment"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
