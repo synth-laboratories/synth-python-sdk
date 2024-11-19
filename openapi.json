@@ -136,8 +136,101 @@
         "deprecated": false
       }
     },
+    "/abstractions/TrainingQuestion": {
+      "post": {
+        "tags": [
+          "abstractions"
+        ],
+        "summary": "TrainingQuestion",
+        "description": "A training question is a question that an agent (system_id) is trying to answer.\nIt contains an intent and criteria that the agent is trying to meet.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
+        "externalDocs": {
+          "description": "View source on GitHub",
+          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py"
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/abstractions/RewardSignal": {
+      "post": {
+        "tags": [
+          "abstractions"
+        ],
+        "summary": "RewardSignal",
+        "description": "A reward signal tells us how well an agent (system_id) is doing on a particular question (question_id).\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
+        "externalDocs": {
+          "description": "View source on GitHub",
+          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py"
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/abstractions/Dataset": {
+      "post": {
+        "tags": [
+          "abstractions"
+        ],
+        "summary": "Dataset",
+        "description": "A dataset is a collection of training questions and reward signals. \nThis better represents the data that is used to train a model, and gives us more information about the data.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
+        "externalDocs": {
+          "description": "View source on GitHub",
+          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py"
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
     "/trackers/SynthTrackerSync": {
-      "get": {
+      "post": {
         "tags": [
           "trackers"
         ],
@@ -168,7 +261,7 @@
       }
     },
     "/trackers/SynthTrackerAsync": {
-      "get": {
+      "post": {
         "tags": [
           "trackers"
         ],
@@ -199,7 +292,7 @@
       }
     },
     "/trackers/SynthTracker": {
-      "get": {
+      "post": {
         "tags": [
           "trackers"
         ],
