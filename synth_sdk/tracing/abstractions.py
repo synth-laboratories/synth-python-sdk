@@ -131,6 +131,10 @@ class SystemTrace:
 
 
 class TrainingQuestion(BaseModel):
+    '''
+    A training question is a question that an agent (system_id) is trying to answer.
+    It contains an intent and criteria that the agent is trying to meet.
+    '''
     intent: str
     criteria: str
     question_id: Optional[str] = None
@@ -144,6 +148,9 @@ class TrainingQuestion(BaseModel):
 
 
 class RewardSignal(BaseModel):
+    '''
+    A reward signal tells us how well an agent (system_id) is doing on a particular question (question_id).
+    '''
     question_id: Optional[str] = None
     system_id: str
     reward: Union[float, int, bool]
@@ -159,6 +166,10 @@ class RewardSignal(BaseModel):
 
 
 class Dataset(BaseModel):
+    '''
+    A dataset is a collection of training questions and reward signals. 
+    This better represents the data that is used to train a model, and gives us more information about the data.
+    '''
     questions: List[TrainingQuestion]
     reward_signals: List[RewardSignal]
 
