@@ -48,51 +48,6 @@ def trace_system_sync(
     verbose: bool = False,
     finetune_step: bool = True,
 ) -> Callable:
-    """
-    Decorator for tracing synchronous method execution in an AI system.
-    Handles automatic input/output tracking and event management.
-
-    Args:
-        origin (Literal["agent", "environment"]): Source of the computation
-            - "agent": For AI/model operations
-            - "environment": For external system operations
-
-        event_type (str): Type of event being traced (e.g., "inference", "training")
-
-        log_result (bool, optional): Whether to log the function's return value.
-            Defaults to False.
-
-        manage_event (Literal["create", "end", None], optional): 
-            Controls the lifecycle of the event associated with the traced function.
-            - "create": Start a new event at the beginning of the function execution.
-            - "end": Immediately conclude the current event once the function execution completes.
-            - None: Do not manage event lifecycle automatically. Event management must be handled manually if needed.
-            Defaults to None.
-
-        increment_partition (bool, optional): Whether to increment the trace partition.
-            Used to group related events. Defaults to False.
-
-        verbose (bool, optional): Enable detailed logging. Defaults to False.
-
-        finetune_step (bool, optional): Mark this trace as part of fine-tuning.
-            Defaults to True.
-
-    Returns:
-        Callable: The decorated function with tracing capabilities.
-
-    Raises:
-        ValueError: If:
-            - The decorated method is called without an instance (`self`).
-            - The instance lacks the required `system_id` attribute.
-        RuntimeError: If tracing initialization fails.
-        TypeError: If tracked values have invalid types.
-
-    Notes:
-        - Requires the decorated method to be an instance method with a `system_id` attribute.
-        - Automatically tracks method inputs and outputs.
-        - Manages thread-local storage for trace data.
-        - Ensures cleanup in the `finally` block to maintain trace integrity.
-    """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -294,53 +249,8 @@ def trace_system_async(
     verbose: bool = False,
     finetune_step: bool = True,
 ) -> Callable:
-    """
-    Decorator for tracing asynchronous method execution in an AI system.
-    Handles automatic input/output tracking and event management in async contexts.
+    """Decorator for tracing asynchronous functions."""
 
-    Args:
-        origin (Literal["agent", "environment"]): Source of the computation
-            - "agent": For AI/model operations
-            - "environment": For external system operations
-
-        event_type (str): Type of event being traced (e.g., "inference", "training")
-
-        log_result (bool, optional): Whether to log the function's return value.
-            Defaults to False.
-
-        manage_event (Literal["create", "end", "lazy_end", None], optional): 
-            Controls the lifecycle of the event associated with the traced function.
-            - "create": Start a new event at the beginning of the function execution.
-            - "end": Immediately conclude the current event once the function execution completes.
-            - "lazy_end": Mark the event to be concluded after all nested computations and asynchronous tasks have finished. This ensures that all related asynchronous operations are captured within the same event scope.
-            - None: Do not manage event lifecycle automatically. Event management must be handled manually if needed.
-            Defaults to None.
-
-        increment_partition (bool, optional): Whether to increment the trace partition.
-            Used to group related events. Defaults to False.
-
-        verbose (bool, optional): Enable detailed logging. Defaults to False.
-
-        finetune_step (bool, optional): Mark this trace as part of fine-tuning.
-            Defaults to True.
-
-    Returns:
-        Callable: The decorated asynchronous function with tracing capabilities.
-
-    Raises:
-        ValueError: If:
-            - The decorated method is called without an instance (`self`).
-            - The instance lacks the required `system_id` attribute.
-        RuntimeError: If tracing initialization fails.
-        TypeError: If tracked values have invalid types.
-
-    Notes:
-        - Requires the decorated method to be an instance method with a `system_id` attribute.
-        - Automatically tracks method inputs and outputs.
-        - Uses `contextvars` for async-safe storage.
-        - Ensures cleanup in the `finally` block to maintain trace integrity.
-        - Safe for concurrent execution in asynchronous contexts.
-    """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
@@ -545,6 +455,8 @@ def trace_system(
     """
     Decorator that chooses the correct tracing method (sync or async) based on
     whether the wrapped function is synchronous or asynchronous.
+
+    Purpose is to keep track of inputs and outputs for compute steps for both sync and async functions.
     """
     def decorator(func: Callable) -> Callable:
         # Check if the function is async or sync
@@ -566,7 +478,7 @@ def trace_system(
     return decorator
 
 def track_result(result, tracker, origin):
-    """Helper function to track results, including tuple unpacking"""
+    # Helper function to track results, including tuple unpacking
     if isinstance(result, tuple):
         # Track each element of the tuple that matches valid types
         for i, item in enumerate(result):

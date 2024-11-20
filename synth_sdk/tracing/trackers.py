@@ -10,6 +10,12 @@ from synth_sdk.tracing.abstractions import MessageInputs, MessageOutputs
 # Existing SynthTrackerSync and SynthTrackerAsync classes...
 
 class SynthTrackerSync:
+    """Tracker for synchronous functions.
+    
+    Purpose is to annotate the inside of your sync functions to track intermediate values.
+    Decorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.
+    This tracker is instead used to access the data inside of decorated functions.
+    """
     _local = _local
 
     @classmethod
@@ -85,6 +91,12 @@ trace_outputs_var = contextvars.ContextVar("trace_outputs", default=None)
 trace_initialized_var = contextvars.ContextVar("trace_initialized", default=False)
 
 class SynthTrackerAsync:
+    """Tracker for synchronous functions.
+    
+    Purpose is to annotate the inside of your sync functions to track intermediate values.
+    Decorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.
+    This tracker is instead used to access the data inside of decorated functions.
+    """
     @classmethod
     def initialize(cls):
         trace_initialized_var.set(True)
@@ -174,6 +186,12 @@ synth_tracker_sync = SynthTrackerSync
 synth_tracker_async = SynthTrackerAsync
 
 class SynthTracker:
+    """Tracker for synchronous and asynchronous functions. Intelligently chooses between sync and async trackers.
+    
+    Purpose is to annotate the inside of your sync and async functions to track intermediate values.
+    Decorators @trace_system_sync and @trace_system_async are used to annotate the functions and track the inputs and outputs.
+    This tracker is instead used to access the data inside of decorated functions.
+    """
     @classmethod
     def is_called_by_async(cls):
         try:
