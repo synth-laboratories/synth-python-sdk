@@ -1,11 +1,8 @@
 # synth_sdk/tracing/decorators.py
 from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union, List
 from functools import wraps
-import threading
 import time
 import logging
-import contextvars
-from pydantic import BaseModel
 
 from synth_sdk.tracing.abstractions import (
     Event,
@@ -46,7 +43,7 @@ def trace_system_sync(
     origin: Literal["agent", "environment"],
     event_type: str,
     log_result: bool = False,
-    manage_event: Literal["create", "end", "lazy_end", None] = None,
+    manage_event: Literal["create", "end", None] = None,
     increment_partition: bool = False,
     verbose: bool = False,
     finetune_step: bool = True,
@@ -220,7 +217,7 @@ def trace_system_sync(
 
                 # Handle event management after function execution
                 if (
-                    manage_event in ["end", "lazy_end"]
+                    manage_event == "end"
                     and event_type in _local.active_events
                 ):
                     current_event = _local.active_events[event_type]
@@ -427,7 +424,7 @@ def trace_system_async(
 
                 # Handle event management after function execution
                 if (
-                    manage_event in ["end", "lazy_end"]
+                    manage_event == "end"
                     and event_type in active_events_var.get()
                 ):
                     current_event = active_events_var.get()[event_type]
@@ -450,10 +447,8 @@ def trace_system_async(
                 synth_tracker_async.finalize()
                 # Reset context variable for system_id
                 system_id_var.reset(system_id_token)
-                logger.debug(f"Cleaning up system_id from context vars")
-
+                logger.debug("Cleaning up system_id from context vars")
         return async_wrapper
-
     return decorator
 
 def trace_system(

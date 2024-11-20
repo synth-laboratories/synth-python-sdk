@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union, Tuple, Coroutine
 from pydantic import BaseModel, validator
 import synth_sdk.config.settings
 import requests

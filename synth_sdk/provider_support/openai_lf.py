@@ -1,5 +1,4 @@
 import copy
-import logging
 from inspect import isclass
 import types
 
@@ -19,7 +18,8 @@ from langfuse.utils import _get_timestamp
 from langfuse.utils.langfuse_singleton import LangfuseSingleton
 from synth_sdk.tracing.trackers import synth_tracker_sync, synth_tracker_async
 from pydantic import BaseModel
-from synth_sdk.tracing.abstractions import MessageInputs, MessageOutputs
+from synth_sdk.tracing.abstractions import MessageInputs
+from synth_sdk.provider_support.suppress_logging import *
 
 try:
     import openai
@@ -28,7 +28,8 @@ except ImportError:
         "Please install OpenAI to use this feature: 'pip install openai'"
     )
 
-# CREDIT TO LANGFUSE FOR OPENSOURCING THE CODE THAT THIS IS BASED ON
+# CREDIT TO LANGFUSE FOR OPEN-SOURCING THE CODE THAT THIS IS BASED ON
+# USING WITH MIT LICENSE PERMISSION
 # https://langfuse.com
 
 try:
@@ -39,7 +40,7 @@ except ImportError:
     AzureOpenAI = None
     OpenAI = None
 
-log = logging.getLogger("langfuse")
+#log = logging.getLogger("langfuse")
 
 
 @dataclass
@@ -598,7 +599,7 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
 
         return openai_response
     except Exception as ex:
-        log.warning(ex)
+        #log.warning(ex)
         model = kwargs.get("model", None) or None
         generation.update(
             end_time=_get_timestamp(),
