@@ -1,6 +1,6 @@
 [project]
 name = "synth-sdk"
-version = "0.2.74"
+version = "0.2.75"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "langfuse>=2.53.9",
     "pytest>=8.3.3",
+    "pydantic-openapi-schema>=1.5.1",
 ]
 classifiers = []
 

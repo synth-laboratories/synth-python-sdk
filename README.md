@@ -1,6 +1,3 @@
-# sdk
-Python sdk for Synth
+# Synth Python SDK
 
-python -m build
-twine check dist/*
-twine upload dist/*
+Python SDK for Synth

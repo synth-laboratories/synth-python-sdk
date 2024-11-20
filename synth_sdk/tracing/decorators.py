@@ -1,11 +1,8 @@
 # synth_sdk/tracing/decorators.py
 from typing import Callable, Optional, Set, Literal, Any, Dict, Tuple, Union, List
 from functools import wraps
-import threading
 import time
 import logging
-import contextvars
-from pydantic import BaseModel
 
 from synth_sdk.tracing.abstractions import (
     Event,
@@ -46,11 +43,56 @@ def trace_system_sync(
     origin: Literal["agent", "environment"],
     event_type: str,
     log_result: bool = False,
-    manage_event: Literal["create", "end", "lazy_end", None] = None,
+    manage_event: Literal["create", "end", None] = None,
     increment_partition: bool = False,
     verbose: bool = False,
     finetune_step: bool = True,
 ) -> Callable:
+    """
+    Decorator for tracing synchronous method execution in an AI system.
+    Handles automatic input/output tracking and event management.
+
+    Args:
+        origin (Literal["agent", "environment"]): Source of the computation
+            - "agent": For AI/model operations
+            - "environment": For external system operations
+
+        event_type (str): Type of event being traced (e.g., "inference", "training")
+
+        log_result (bool, optional): Whether to log the function's return value.
+            Defaults to False.
+
+        manage_event (Literal["create", "end", None], optional): 
+            Controls the lifecycle of the event associated with the traced function.
+            - "create": Start a new event at the beginning of the function execution.
+            - "end": Immediately conclude the current event once the function execution completes.
+            - None: Do not manage event lifecycle automatically. Event management must be handled manually if needed.
+            Defaults to None.
+
+        increment_partition (bool, optional): Whether to increment the trace partition.
+            Used to group related events. Defaults to False.
+
+        verbose (bool, optional): Enable detailed logging. Defaults to False.
+
+        finetune_step (bool, optional): Mark this trace as part of fine-tuning.
+            Defaults to True.
+
+    Returns:
+        Callable: The decorated function with tracing capabilities.
+
+    Raises:
+        ValueError: If:
+            - The decorated method is called without an instance (`self`).
+            - The instance lacks the required `system_id` attribute.
+        RuntimeError: If tracing initialization fails.
+        TypeError: If tracked values have invalid types.
+
+    Notes:
+        - Requires the decorated method to be an instance method with a `system_id` attribute.
+        - Automatically tracks method inputs and outputs.
+        - Manages thread-local storage for trace data.
+        - Ensures cleanup in the `finally` block to maintain trace integrity.
+    """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -216,7 +258,7 @@ def trace_system_sync(
 
                 # Handle event management after function execution
                 if (
-                    manage_event in ["end", "lazy_end"]
+                    manage_event == "end"
                     and event_type in _local.active_events
                 ):
                     current_event = _local.active_events[event_type]
@@ -252,8 +294,53 @@ def trace_system_async(
     verbose: bool = False,
     finetune_step: bool = True,
 ) -> Callable:
-    """Decorator for tracing asynchronous functions."""
+    """
+    Decorator for tracing asynchronous method execution in an AI system.
+    Handles automatic input/output tracking and event management in async contexts.
 
+    Args:
+        origin (Literal["agent", "environment"]): Source of the computation
+            - "agent": For AI/model operations
+            - "environment": For external system operations
+
+        event_type (str): Type of event being traced (e.g., "inference", "training")
+
+        log_result (bool, optional): Whether to log the function's return value.
+            Defaults to False.
+
+        manage_event (Literal["create", "end", "lazy_end", None], optional): 
+            Controls the lifecycle of the event associated with the traced function.
+            - "create": Start a new event at the beginning of the function execution.
+            - "end": Immediately conclude the current event once the function execution completes.
+            - "lazy_end": Mark the event to be concluded after all nested computations and asynchronous tasks have finished. This ensures that all related asynchronous operations are captured within the same event scope.
+            - None: Do not manage event lifecycle automatically. Event management must be handled manually if needed.
+            Defaults to None.
+
+        increment_partition (bool, optional): Whether to increment the trace partition.
+            Used to group related events. Defaults to False.
+
+        verbose (bool, optional): Enable detailed logging. Defaults to False.
+
+        finetune_step (bool, optional): Mark this trace as part of fine-tuning.
+            Defaults to True.
+
+    Returns:
+        Callable: The decorated asynchronous function with tracing capabilities.
+
+    Raises:
+        ValueError: If:
+            - The decorated method is called without an instance (`self`).
+            - The instance lacks the required `system_id` attribute.
+        RuntimeError: If tracing initialization fails.
+        TypeError: If tracked values have invalid types.
+
+    Notes:
+        - Requires the decorated method to be an instance method with a `system_id` attribute.
+        - Automatically tracks method inputs and outputs.
+        - Uses `contextvars` for async-safe storage.
+        - Ensures cleanup in the `finally` block to maintain trace integrity.
+        - Safe for concurrent execution in asynchronous contexts.
+    """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
@@ -420,7 +507,7 @@ def trace_system_async(
 
                 # Handle event management after function execution
                 if (
-                    manage_event in ["end", "lazy_end"]
+                    manage_event == "end"
                     and event_type in active_events_var.get()
                 ):
                     current_event = active_events_var.get()[event_type]
@@ -443,10 +530,8 @@ def trace_system_async(
                 synth_tracker_async.finalize()
                 # Reset context variable for system_id
                 system_id_var.reset(system_id_token)
-                logger.debug(f"Cleaning up system_id from context vars")
-
+                logger.debug("Cleaning up system_id from context vars")
         return async_wrapper
-
     return decorator
 
 def trace_system(

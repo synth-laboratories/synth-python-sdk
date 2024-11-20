@@ -189,6 +189,40 @@ class SynthTracker:
         model_name: str,
         finetune: bool = False,
     ):
+        """
+        Track a language model interaction within the current trace.
+        Automatically detects whether to use sync or async tracking.
+
+        Args:
+            messages (List[Dict[str, str]]): List of message dictionaries containing the conversation.
+                Each message should have:
+                - 'role': str - The role of the speaker (e.g., "user", "assistant", "system")
+                - 'content': str - The content of the message
+
+            model_name (str): Name of the language model being used
+                Examples: "gpt-4", "gpt-3.5-turbo", "claude-3-opus-20240229"
+
+            finetune (bool, optional): Whether this interaction is part of a fine-tuning process.
+                Defaults to False.
+
+        Raises:
+            RuntimeError: If called outside a traced context (use with @trace_system_sync 
+                or @trace_system_async decorator)
+            TypeError: If messages or model_name are not of the correct type
+
+        Example:
+            ```python
+            @trace_system_sync(origin="agent", event_type="chat")
+            def process_chat(self, user_input: str):
+                messages = [
+                    {"role": "user", "content": user_input}
+                ]
+                SynthTracker.track_lm(
+                    messages=messages,
+                    model_name="gpt-4"
+                )
+            ```
+        """
         if cls.is_called_by_async() and trace_initialized_var.get():
             logger.debug("Using async tracker to track LM")
             synth_tracker_async.track_lm(messages, model_name, finetune)
@@ -206,6 +240,44 @@ class SynthTracker:
         origin: Literal["agent", "environment"],
         annotation: Optional[str] = None,
     ):
+        """
+        Track a state change or variable value within the current trace.
+        Automatically detects whether to use sync or async tracking.
+
+        Args:
+            variable_name (str): Name of the variable or state being tracked
+
+            variable_value (Union[BaseModel, str, dict, int, float, bool, list, None]): 
+                Value to track. Must be one of the supported types:
+                - BaseModel (Pydantic models)
+                - Basic Python types (str, dict, int, float, bool, list)
+                - None
+
+            origin (Literal["agent", "environment"]): Source of the state change
+                - "agent": Changes from the AI/agent system
+                - "environment": Changes from external sources/environment
+
+            annotation (Optional[str], optional): Additional notes about the state change.
+                Defaults to None.
+
+        Raises:
+            RuntimeError: If called outside a traced context (use with @trace_system_sync 
+                or @trace_system_async decorator)
+            TypeError: If variable_value is not one of the supported types
+            ValueError: If origin is not "agent" or "environment"
+
+        Example:
+            ```python
+            @trace_system_sync(origin="agent", event_type="process")
+            def update_state(self, new_value: dict):
+                SynthTracker.track_state(
+                    variable_name="system_state",
+                    variable_value=new_value,
+                    origin="agent",
+                    annotation="Updated after processing"
+                )
+            ```
+        """
         if cls.is_called_by_async() and trace_initialized_var.get():
             logger.debug("Using async tracker to track state")
             synth_tracker_async.track_state(variable_name, variable_value, origin, annotation)

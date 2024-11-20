@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union, Tuple, Coroutine
 from pydantic import BaseModel, validator
 import synth_sdk.config.settings
 import requests
@@ -177,8 +177,50 @@ def is_event_loop_running():
         # This exception is raised if no event loop is running
         return False
 
-# Supports calls from both async and sync contexts
-def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+def upload(
+    dataset: Dataset, 
+    traces: List[SystemTrace] = [], 
+    verbose: bool = False, 
+    show_payload: bool = False
+) -> Union[Coroutine, Tuple[requests.Response, Dict, Dataset, List[SystemTrace]]]:
+    """
+    Upload system traces and dataset to the Synth server. This function handles both synchronous
+    and asynchronous contexts automatically.
+
+    Args:
+        dataset (Dataset): Dataset containing questions and reward signals for evaluation.
+            Must include:
+            - questions: List of training questions with intent and criteria
+            - reward_signals: List of performance metrics for each system response
+
+        traces (List[SystemTrace], optional): List of system traces to upload. If empty,
+            will use traces from the global event store. Defaults to [].
+
+        verbose (bool, optional): Enable detailed logging of the upload process.
+            Includes validation steps and response details. Defaults to False.
+
+        show_payload (bool, optional): Print the complete payload being sent to the server.
+            Useful for debugging. Defaults to False.
+
+    Returns:
+        In async context:
+            Coroutine that when awaited returns Tuple[Response, Dict, Dataset, List[SystemTrace]]
+        In sync context:
+            Tuple[Response, Dict, Dataset, List[SystemTrace]] containing:
+            - Response: Server response object
+            - Dict: Upload payload sent to server
+            - Dataset: Original dataset object
+            - List[SystemTrace]: List of traces that were uploaded
+
+    Raises:
+        ValueError: If any of these conditions are met:
+            - SYNTH_API_KEY environment variable is not set
+            - No system traces are found
+            - Dataset validation fails
+            - Upload payload validation fails
+        
+        requests.exceptions.HTTPError: If the server request fails
+    """
     async def upload_wrapper(dataset, traces, verbose, show_payload):
         result = await upload_helper(dataset, traces, verbose, show_payload)
         return result
