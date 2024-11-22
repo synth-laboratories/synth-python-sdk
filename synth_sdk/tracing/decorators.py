@@ -100,8 +100,7 @@ def trace_system_sync(
                         logger.debug(
                             f"Incremented partition to: {event.partition_index}"
                         )
-
-                    set_current_event(event)
+                    set_current_event(event, decorator_type="sync")
                     logger.debug(f"Created and set new event: {event_type}")
 
                 # Automatically trace function inputs
@@ -309,7 +308,7 @@ def trace_system_async(
                             f"Incremented partition to: {event.partition_index}"
                         )
 
-                    set_current_event(event)
+                    set_current_event(event, decorator_type="async")
                     logger.debug(f"Created and set new event: {event_type}")
 
                 # Automatically trace function inputs
@@ -467,7 +466,7 @@ def trace_system(
     """
     def decorator(func: Callable) -> Callable:
         # Check if the function is async or sync
-        if inspect.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func):
             # Use async tracing
             logger.debug("Using async tracing")
             async_decorator = trace_system_async(

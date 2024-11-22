@@ -219,21 +219,10 @@ def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False
     questions_json is the formatted questions array
     reward_signals_json is the formatted reward signals array
     traces_json is the formatted traces array"""
-    async def upload_wrapper(dataset, traces, verbose, show_payload):
-        response, payload, dataset, traces = await upload_helper(dataset, traces, verbose, show_payload)
- 
-    # If we're in an async context (event loop is running)
-    if is_event_loop_running():
-        logging.info("Event loop is already running")
-        # Return the coroutine directly for async contexts
-        return upload_helper(dataset, traces, verbose, show_payload)
-    else:
-        # In sync context, run the coroutine and return the result
-        logging.info("Event loop is not running")
-        return asyncio.run(upload_helper(dataset, traces, verbose, show_payload))
 
+    return upload_helper(dataset, traces, verbose, show_payload)
 
-async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
         raise ValueError("SYNTH_API_KEY environment variable not set")
