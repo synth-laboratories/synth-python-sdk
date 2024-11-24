@@ -8,7 +8,7 @@
   },
   "servers": [
     {
-      "url": "https://github.com/synth-laboratories/synth-sdk"
+      "url": "/"
     }
   ],
   "paths": {
@@ -18,10 +18,10 @@
           "upload"
         ],
         "summary": "upload",
-        "description": "Upload all system traces and dataset to the server.\nReturns a tuple of (response, payload, dataset, traces)\n\nResponse is the response from the server.\nPayload is the payload that was sent to the server.\nDataset is the dataset that was uploaded.\nTraces is the list of traces that were tracked by the trace_system() decorators and SynthTracker.\n\n**Function Signature:** `upload(dataset, traces, verbose, show_payload)`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/upload.py#L178)",
+        "description": "Upload all system traces and dataset to the server.\nReturns a tuple of (response, questions_json, reward_signals_json, traces_json)\nNote that you can directly upload questions, reward_signals, and traces to the server using the Website\n\nresponse is the response from the server.\nquestions_json is the formatted questions array\nreward_signals_json is the formatted reward signals array\ntraces_json is the formatted traces array\n\n**Function Signature:** `upload(dataset, traces, verbose, show_payload)`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/upload.py#L213)",
         "externalDocs": {
           "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/upload.py#L178"
+          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/upload.py#L213"
         },
         "responses": {
           "200": {
@@ -142,10 +142,10 @@
           "decorators"
         ],
         "summary": "trace_system_async",
-        "description": "Decorator for tracing asynchronous functions.\n\nPurpose is to keep track of inputs and outputs for compute steps for _async functions.\n\n**Function Signature:** `trace_system_async(origin, event_type, log_result, manage_event, increment_partition, verbose, finetune_step)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L247)",
+        "description": "Decorator for tracing asynchronous functions.\n\nPurpose is to keep track of inputs and outputs for compute steps for _async functions.\n\n**Function Signature:** `trace_system_async(origin, event_type, log_result, manage_event, increment_partition, verbose, finetune_step)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L246)",
         "externalDocs": {
           "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L247"
+          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L246"
         },
         "responses": {
           "200": {
@@ -173,10 +173,10 @@
           "decorators"
         ],
         "summary": "trace_system",
-        "description": "Decorator that chooses the correct tracing method (sync or _async) based on\nwhether the wrapped function is synchronous or asynchronous.\n\nPurpose is to keep track of inputs and outputs for compute steps for both sync and _async functions.\n\n**Function Signature:** `trace_system(origin, event_type, log_result, manage_event, increment_partition, verbose)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L454)",
+        "description": "Decorator that chooses the correct tracing method (sync or _async) based on\nwhether the wrapped function is synchronous or asynchronous.\n\nPurpose is to keep track of inputs and outputs for compute steps for both sync and _async functions.\n\n**Function Signature:** `trace_system(origin, event_type, log_result, manage_event, increment_partition, verbose)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L453)",
         "externalDocs": {
           "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L454"
+          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L453"
         },
         "responses": {
           "200": {
@@ -198,12 +198,12 @@
         "deprecated": false
       }
     },
-    "/abstractions/TrainingQuestion": {
-      "post": {
+    "/abstractions/abstractions.TrainingQuestion": {
+      "get": {
         "tags": [
-          "abstractions"
+          "Classes"
         ],
-        "summary": "TrainingQuestion",
+        "summary": "abstractions.TrainingQuestion",
         "description": "A training question is a question that an agent (system_id) is trying to answer.\nIt contains an intent and criteria that the agent is trying to meet.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
         "externalDocs": {
           "description": "View source on GitHub",
@@ -229,12 +229,12 @@
         "deprecated": false
       }
     },
-    "/abstractions/RewardSignal": {
-      "post": {
+    "/abstractions/abstractions.RewardSignal": {
+      "get": {
         "tags": [
-          "abstractions"
+          "Classes"
         ],
-        "summary": "RewardSignal",
+        "summary": "abstractions.RewardSignal",
         "description": "A reward signal tells us how well an agent (system_id) is doing on a particular question (question_id).\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
         "externalDocs": {
           "description": "View source on GitHub",
@@ -260,12 +260,12 @@
         "deprecated": false
       }
     },
-    "/abstractions/Dataset": {
-      "post": {
+    "/abstractions/abstractions.Dataset": {
+      "get": {
         "tags": [
-          "abstractions"
+          "Classes"
         ],
-        "summary": "Dataset",
+        "summary": "abstractions.Dataset",
         "description": "A dataset is a collection of training questions and reward signals. \nThis better represents the data that is used to train a model, and gives us more information about the data.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
         "externalDocs": {
           "description": "View source on GitHub",
@@ -291,12 +291,12 @@
         "deprecated": false
       }
     },
-    "/trackers/SynthTrackerSync": {
-      "post": {
+    "/trackers/trackers.SynthTrackerSync": {
+      "get": {
         "tags": [
-          "trackers"
+          "Classes"
         ],
-        "summary": "SynthTrackerSync",
+        "summary": "trackers.SynthTrackerSync",
         "description": "Tracker for synchronous functions.\n\nPurpose is to annotate the inside of your sync functions to track intermediate values.\nDecorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.\nThis tracker is instead used to access the data inside of decorated functions.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py)",
         "externalDocs": {
           "description": "View source on GitHub",
@@ -322,12 +322,12 @@
         "deprecated": false
       }
     },
-    "/trackers/SynthTrackerAsync": {
-      "post": {
+    "/trackers/trackers.SynthTrackerAsync": {
+      "get": {
         "tags": [
-          "trackers"
+          "Classes"
         ],
-        "summary": "SynthTrackerAsync",
+        "summary": "trackers.SynthTrackerAsync",
         "description": "Tracker for synchronous functions.\n\nPurpose is to annotate the inside of your sync functions to track intermediate values.\nDecorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.\nThis tracker is instead used to access the data inside of decorated functions.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py)",
         "externalDocs": {
           "description": "View source on GitHub",
@@ -353,12 +353,12 @@
         "deprecated": false
       }
     },
-    "/trackers/SynthTracker": {
-      "post": {
+    "/trackers/trackers.SynthTracker": {
+      "get": {
         "tags": [
-          "trackers"
+          "Classes"
         ],
-        "summary": "SynthTracker",
+        "summary": "trackers.SynthTracker",
         "description": "Tracker for synchronous and asynchronous functions. Intelligently chooses between sync and _async trackers.\n\nPurpose is to annotate the inside of your sync and _async functions to track intermediate values.\nDecorators @trace_system_sync and @trace_system_async are used to annotate the functions and track the inputs and outputs.\nThis tracker is instead used to access the data inside of decorated functions.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py)",
         "externalDocs": {
           "description": "View source on GitHub",
