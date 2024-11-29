@@ -13,15 +13,14 @@ import asyncio
 
 
 def validate_json(data: dict) -> None:
-    """
-    Validate that a dictionary contains only JSON-serializable values.
+    #Validate that a dictionary contains only JSON-serializable values.
 
-    Args:
-        data: Dictionary to validate for JSON serialization
+    #Args:
+    #    data: Dictionary to validate for JSON serialization
 
-    Raises:
-        ValueError: If the dictionary contains non-serializable values
-    """
+    #Raises:
+    #    ValueError: If the dictionary contains non-serializable values
+    
     try:
         json.dumps(data)
     except (TypeError, OverflowError) as e:
@@ -39,7 +38,7 @@ def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]
 def send_system_traces(
     dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, 
 ):
-    """Send all system traces and dataset metadata to the server."""
+    # Send all system traces and dataset metadata to the server.
     # Get the token using the API key
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
@@ -158,10 +157,8 @@ class UploadValidator(BaseModel):
 
 
 def validate_upload(traces: List[Dict[str, Any]], dataset: Dict[str, Any]):
-    """
-    Validate the upload format before sending to server.
-    Raises ValueError if validation fails.
-    """
+    #Validate the upload format before sending to server.
+    #Raises ValueError if validation fails.
     try:
         UploadValidator(traces=traces, dataset=dataset)
         return True
@@ -177,67 +174,55 @@ def is_event_loop_running():
         # This exception is raised if no event loop is running
         return False
 
-def upload(
-    dataset: Dataset, 
-    traces: List[SystemTrace] = [], 
-    verbose: bool = False, 
-    show_payload: bool = False
-) -> Union[Coroutine, Tuple[requests.Response, Dict, Dataset, List[SystemTrace]]]:
-    """
-    Upload system traces and dataset to the Synth server. This function handles both synchronous
-    and asynchronous contexts automatically.
+def format_upload_output(dataset, traces):
+    # Format questions array
+    questions_data = [
+        {
+            "intent": q.intent,
+            "criteria": q.criteria,
+            "question_id": q.question_id
+        } for q in dataset.questions
+    ]
+    
+    # Format reward signals array with error handling
+    reward_signals_data = [
+        {
+            "system_id": rs.system_id,
+            "reward": rs.reward,
+            "question_id": rs.question_id,
+            "annotation": rs.annotation if hasattr(rs, 'annotation') else None
+        } for rs in dataset.reward_signals
+    ]
+    
+    # Format traces array
+    traces_data = [
+        {
+            "system_id": t.system_id,
+            "partition": [
+                {
+                    "partition_index": p.partition_index,
+                    "events": [e.to_dict() for e in p.events]
+                } for p in t.partition
+            ]
+        } for t in traces
+    ]
 
-    Args:
-        dataset (Dataset): Dataset containing questions and reward signals for evaluation.
-            Must include:
-            - questions: List of training questions with intent and criteria
-            - reward_signals: List of performance metrics for each system response
+    return questions_data, reward_signals_data, traces_data
 
-        traces (List[SystemTrace], optional): List of system traces to upload. If empty,
-            will use traces from the global event store. Defaults to [].
+# Supports calls from both async and sync contexts
+def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+    """Upload all system traces and dataset to the server.
+    Returns a tuple of (response, questions_json, reward_signals_json, traces_json)
+    Note that you can directly upload questions, reward_signals, and traces to the server using the Website
+    
+    response is the response from the server.
+    questions_json is the formatted questions array
+    reward_signals_json is the formatted reward signals array
+    traces_json is the formatted traces array"""
 
-        verbose (bool, optional): Enable detailed logging of the upload process.
-            Includes validation steps and response details. Defaults to False.
+    return upload_helper(dataset, traces, verbose, show_payload)
 
-        show_payload (bool, optional): Print the complete payload being sent to the server.
-            Useful for debugging. Defaults to False.
-
-    Returns:
-        In async context:
-            Coroutine that when awaited returns Tuple[Response, Dict, Dataset, List[SystemTrace]]
-        In sync context:
-            Tuple[Response, Dict, Dataset, List[SystemTrace]] containing:
-            - Response: Server response object
-            - Dict: Upload payload sent to server
-            - Dataset: Original dataset object
-            - List[SystemTrace]: List of traces that were uploaded
-
-    Raises:
-        ValueError: If any of these conditions are met:
-            - SYNTH_API_KEY environment variable is not set
-            - No system traces are found
-            - Dataset validation fails
-            - Upload payload validation fails
-        
-        requests.exceptions.HTTPError: If the server request fails
-    """
-    async def upload_wrapper(dataset, traces, verbose, show_payload):
-        result = await upload_helper(dataset, traces, verbose, show_payload)
-        return result
-
-    # If we're in an async context (event loop is running)
-    if is_event_loop_running():
-        logging.info("Event loop is already running")
-        # Return the coroutine directly for async contexts
-        return upload_helper(dataset, traces, verbose, show_payload)
-    else:
-        # In sync context, run the coroutine and return the result
-        logging.info("Event loop is not running")
-        return asyncio.run(upload_helper(dataset, traces, verbose, show_payload))
-
-
-async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
-    """Upload all system traces and dataset to the server."""
+def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
         raise ValueError("SYNTH_API_KEY environment variable not set")
@@ -305,7 +290,11 @@ async def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose:
         if show_payload:
             print("Payload sent to server: ")
             pprint(payload)
-        return response, payload, dataset, traces
+
+        #return response, payload, dataset, traces
+        questions_json, reward_signals_json, traces_json = format_upload_output(dataset, traces)
+        return response, questions_json, reward_signals_json, traces_json
+    
     except ValueError as e:
         if verbose:
             print("Validation error:", str(e))

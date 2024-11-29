@@ -131,23 +131,10 @@ class SystemTrace:
 
 
 class TrainingQuestion(BaseModel):
-    """
-    A training question for the system.
-
-    Attributes:
-        intent (str): The intended purpose or goal of the question
-        criteria (str): The evaluation criteria for the question
-        question_id (Optional[str]): Unique identifier for the question
-    
-    Example:
-        ```python
-        question = TrainingQuestion(
-            intent="Test basic addition",
-            criteria="Check if the system can add two numbers correctly",
-            question_id="math-001"
-        )
-        ```
-    """
+    '''
+    A training question is a question that an agent (system_id) is trying to answer.
+    It contains an intent and criteria that the agent is trying to meet.
+    '''
     intent: str
     criteria: str
     question_id: Optional[str] = None
@@ -161,25 +148,9 @@ class TrainingQuestion(BaseModel):
 
 
 class RewardSignal(BaseModel):
-    """
-    A reward signal indicating system performance.
-
-    Attributes:
-        question_id (Optional[str]): Reference to the associated training question
-        system_id (str): Identifier for the system being evaluated
-        reward (Union[float, int, bool]): Performance metric/score
-        annotation (Optional[str]): Additional notes about the reward
-
-    Example:
-        ```python
-        signal = RewardSignal(
-            question_id="math-001",
-            system_id="calc-v1",
-            reward=1.0,
-            annotation="Correct addition performed"
-        )
-        ```
-    """
+    '''
+    A reward signal tells us how well an agent (system_id) is doing on a particular question (question_id).
+    '''
     question_id: Optional[str] = None
     system_id: str
     reward: Union[float, int, bool]
@@ -195,21 +166,10 @@ class RewardSignal(BaseModel):
 
 
 class Dataset(BaseModel):
-    """
-    A collection of training questions and reward signals.
-
-    Attributes:
-        questions (List[TrainingQuestion]): List of training questions
-        reward_signals (List[RewardSignal]): List of associated reward signals
-
-    Example:
-        ```python
-        dataset = Dataset(
-            questions=[TrainingQuestion(...)],
-            reward_signals=[RewardSignal(...)]
-        )
-        ```
-    """
+    '''
+    A dataset is a collection of training questions and reward signals. 
+    This better represents the data that is used to train a model, and gives us more information about the data.
+    '''
     questions: List[TrainingQuestion]
     reward_signals: List[RewardSignal]
 
