@@ -1,18 +1,18 @@
 [project]
 name = "synth-sdk"
-version = "0.2.75"
+version = "0.2.82"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "opentelemetry-api",
     "opentelemetry-sdk",
     "pydantic",
     "requests",
     "asyncio",
-    "zyk>=0.2.18",
+    "zyk==0.2.21",
     "build>=1.2.2.post1",
     "pypi",
     "twine>=4.0.0",
@@ -21,6 +21,9 @@ dependencies = [
     "langfuse>=2.53.9",
     "pytest>=8.3.3",
     "pydantic-openapi-schema>=1.5.1",
+    "pytest-asyncio>=0.24.0",
+    "apropos-ai>=0.4.5",
+    "craftaxlm>=0.0.5",
 ]
 classifiers = []
 

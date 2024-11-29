@@ -30,7 +30,7 @@ def set_current_event(event: Optional["Event"]):
     if event is None:
         raise ValueError("Event cannot be None when setting current event.")
 
-    logger.debug(f"Setting current event of type {event.event_type}")
+    #logger.debug(f"Setting current event of type {event.event_type}")
 
     # Check if we're in an async context
     try:
@@ -68,7 +68,7 @@ def set_current_event(event: Optional["Event"]):
         # Set the new event
         active_events[event.event_type] = event
         active_events_var.set(active_events)
-        logger.debug("New event set as current in context vars")
+        #logger.debug("New event set as current in context vars")
     else:
         # Original thread-local storage logic
         if not hasattr(_local, "active_events"):
@@ -96,7 +96,7 @@ def set_current_event(event: Optional["Event"]):
 
         # Set the new event
         _local.active_events[event.event_type] = event
-        logger.debug("New event set as current in thread local")
+        #logger.debug("New event set as current in thread local")
 
 
 def clear_current_event(event_type: str):

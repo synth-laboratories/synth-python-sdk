@@ -1,6 +1,7 @@
 import copy
 from inspect import isclass
 import types
+import logging
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -41,6 +42,10 @@ except ImportError:
     OpenAI = None
 
 #log = logging.getLogger("langfuse")
+
+# Add logger configuration
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set to DEBUG to see all messages
 
 
 @dataclass
@@ -132,6 +137,8 @@ class OpenAiArgsExtractor:
         langfuse_prompt=None,  # we cannot use prompt because it's an argument of the old OpenAI completions API
         **kwargs,
     ):
+        #logger.debug(f"OpenAiArgsExtractor initialized with kwargs: {kwargs}")
+        #raise NotImplementedError("This method is not implemented yet")
         self.args = {}
         self.args["name"] = name
         self.args["metadata"] = (
@@ -379,115 +386,23 @@ def _create_langfuse_update(
 
 
 def _extract_streamed_openai_response(resource, chunks):
+    #logger.debug(f"Extracting streamed response for resource type: {resource.type}")
+    #logger.debug(f"Number of chunks: {len(chunks)}")
     completion = defaultdict(str) if resource.type == "chat" else ""
     model = None
 
     for chunk in chunks:
         if _is_openai_v1():
             chunk = chunk.__dict__
+        #logger.debug(f"Processing chunk: {chunk}")
 
         model = model or chunk.get("model", None) or None
         usage = chunk.get("usage", None)
-
         choices = chunk.get("choices", [])
+        #logger.debug(f"Extracted - model: {model}, choices: {choices}")
 
-        for choice in choices:
-            if _is_openai_v1():
-                choice = choice.__dict__
-            if resource.type == "chat":
-                delta = choice.get("delta", None)
-
-                if _is_openai_v1():
-                    delta = delta.__dict__
-
-                if delta.get("role", None) is not None:
-                    completion["role"] = delta["role"]
-
-                if delta.get("content", None) is not None:
-                    completion["content"] = (
-                        delta.get("content", None)
-                        if completion["content"] is None
-                        else completion["content"] + delta.get("content", None)
-                    )
-                elif delta.get("function_call", None) is not None:
-                    curr = completion["function_call"]
-                    tool_call_chunk = delta.get("function_call", None)
-
-                    if not curr:
-                        completion["function_call"] = {
-                            "name": getattr(tool_call_chunk, "name", ""),
-                            "arguments": getattr(tool_call_chunk, "arguments", ""),
-                        }
-
-                    else:
-                        curr["name"] = curr["name"] or getattr(
-                            tool_call_chunk, "name", None
-                        )
-                        curr["arguments"] += getattr(tool_call_chunk, "arguments", "")
-
-                elif delta.get("tool_calls", None) is not None:
-                    curr = completion["tool_calls"]
-                    tool_call_chunk = getattr(
-                        delta.get("tool_calls", None)[0], "function", None
-                    )
-
-                    if not curr:
-                        completion["tool_calls"] = [
-                            {
-                                "name": getattr(tool_call_chunk, "name", ""),
-                                "arguments": getattr(tool_call_chunk, "arguments", ""),
-                            }
-                        ]
-
-                    elif getattr(tool_call_chunk, "name", None) is not None:
-                        curr.append(
-                            {
-                                "name": getattr(tool_call_chunk, "name", None),
-                                "arguments": getattr(
-                                    tool_call_chunk, "arguments", None
-                                ),
-                            }
-                        )
-
-                    else:
-                        curr[-1]["name"] = curr[-1]["name"] or getattr(
-                            tool_call_chunk, "name", None
-                        )
-                        curr[-1]["arguments"] += getattr(
-                            tool_call_chunk, "arguments", None
-                        )
-
-            if resource.type == "completion":
-                completion += choice.get("text", None)
-
-    def get_response_for_chat():
-        return (
-            completion["content"]
-            or (
-                completion["function_call"]
-                and {
-                    "role": "assistant",
-                    "function_call": completion["function_call"],
-                }
-            )
-            or (
-                completion["tool_calls"]
-                and {
-                    "role": "assistant",
-                    # "tool_calls": [{"function": completion["tool_calls"]}],
-                    "tool_calls": [
-                        {"function": data} for data in completion["tool_calls"]
-                    ],
-                }
-            )
-            or None
-        )
-
-    return (
-        model,
-        get_response_for_chat() if resource.type == "chat" else completion,
-        usage.__dict__ if _is_openai_v1() and usage is not None else usage,
-    )
+    #logger.debug(f"Final completion: {completion}")
+    return model, completion, usage
 
 
 def _get_langfuse_data_from_default_response(resource: OpenAiDefinition, response):
@@ -653,6 +568,7 @@ async def _wrap_async(
                 ]
                 message_input = MessageInputs(messages=messages)
             elif open_ai_resource.type == "chat":
+                #THIS IS DANGEROUSs
                 messages = arg_extractor.get_openai_args().get("messages", [])
                 messages.append({"role": "assistant", "content": completion["content"]})
                 message_input = MessageInputs(messages=messages)
@@ -892,8 +808,9 @@ class LangfuseResponseGeneratorAsync:
         is_nested_trace,
         kwargs,
     ):
+        #logger.debug(f"LangfuseResponseGeneratorAsync initialized with kwargs: {kwargs}")
+        #logger.debug(f"Resource type: {resource.type}")
         self.items = []
-
         self.resource = resource
         self.response = response
         self.generation = generation
@@ -936,31 +853,50 @@ class LangfuseResponseGeneratorAsync:
         pass
 
     async def _finalize(self):
+        #logger.debug("Starting _finalize in LangfuseResponseGeneratorAsync")
         model, completion, usage = _extract_streamed_openai_response(
             self.resource, self.items
         )
+        #logger.debug(f"Extracted response - model: {model}, completion type: {type(completion)}")
+        #logger.debug(f"Completion content: {completion}")
 
         # Collect messages
+        #logger.debug(f"Resource type: {self.resource.type}")
         if self.resource.type == "completion":
+            #logger.debug("Processing completion type response")
             user_prompt = self.kwargs.get("prompt", "")
+            #logger.debug(f"User prompt: {user_prompt}")
             messages = [
                 {"role": "user", "content": user_prompt},
                 {"role": "assistant", "content": completion},
             ]
             message_input = MessageInputs(messages=messages)
+            #logger.debug(f"Created message input for completion: {messages}")
         elif self.resource.type == "chat":
+            #logger.debug("Processing chat type response")
             messages = self.kwargs.get("messages", [])
-            messages.append({"role": "assistant", "content": completion["content"]})
+            #logger.debug(f"Original messages: {messages}")
+            
+            if isinstance(completion, dict) and "content" in completion:
+                messages.append({"role": "assistant", "content": completion["content"]})
+                #logger.debug(f"Appended assistant message: {completion['content']}")
+            else:
+                logger.warning(f"Unexpected completion format: {completion}")
+            
             message_input = MessageInputs(messages=messages)
+            #logger.debug(f"Final message input for chat: {message_input.messages}")
         else:
+            logger.error(f"Unknown resource type: {self.resource.type}")
             message_input = MessageInputs(messages=[])
-
         # Use track_lm
+        #logger.debug(f"About to track_lm with model: {model}")
+        #logger.debug(f"Messages to track: {message_input.messages}")
         synth_tracker_async.track_lm(
             messages=message_input.messages,
             model_name=model,
             finetune=False
         )
+        #logger.debug("Completed track_lm call")
 
         # Avoiding the trace-update if trace-id is provided by user.
         if not self.is_nested_trace:

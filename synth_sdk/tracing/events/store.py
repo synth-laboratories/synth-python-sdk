@@ -23,61 +23,61 @@ class EventStore:
     ) -> SystemTrace:
         """Get or create a SystemTrace for the given system_id."""
         logger = logging.getLogger(__name__)
-        logger.debug(f"Starting get_or_create_system_trace for {system_id}")
+        #logger.debug(f"Starting get_or_create_system_trace for {system_id}")
 
         def _get_or_create():
-            logger.debug("Inside _get_or_create")
+            #logger.debug("Inside _get_or_create")
             if system_id not in self._traces:
-                logger.debug(f"Creating new system trace for {system_id}")
+                #logger.debug(f"Creating new system trace for {system_id}")
                 self._traces[system_id] = SystemTrace(
                     system_id=system_id,
                     partition=[EventPartitionElement(partition_index=0, events=[])],
                     current_partition_index=0,
                 )
-            logger.debug("Returning system trace")
+            #logger.debug("Returning system trace")
             return self._traces[system_id]
 
         if _already_locked:
             return _get_or_create()
         else:
             with self._lock:
-                logger.debug("Lock acquired in get_or_create_system_trace")
+                #logger.debug("Lock acquired in get_or_create_system_trace")
                 return _get_or_create()
 
     def increment_partition(self, system_id: str) -> int:
         """Increment the partition index for a system and create new partition element."""
         logger = logging.getLogger(__name__)
-        logger.debug(f"Starting increment_partition for system {system_id}")
+        #logger.debug(f"Starting increment_partition for system {system_id}")
 
         with self._lock:
-            logger.debug("Lock acquired in increment_partition")
+            #logger.debug("Lock acquired in increment_partition")
             system_trace = self.get_or_create_system_trace(
                 system_id, _already_locked=True
             )
-            logger.debug(
-                f"Got system trace, current index: {system_trace.current_partition_index}"
-            )
+            #logger.debug(
+            #     f"Got system trace, current index: {system_trace.current_partition_index}"
+            # )
 
             system_trace.current_partition_index += 1
-            logger.debug(
-                f"Incremented index to: {system_trace.current_partition_index}"
-            )
+            #logger.debug(
+            #     f"Incremented index to: {system_trace.current_partition_index}"
+            # )
 
             system_trace.partition.append(
                 EventPartitionElement(
                     partition_index=system_trace.current_partition_index, events=[]
                 )
             )
-            logger.debug("Added new partition element")
+            #logger.debug("Added new partition element")
 
             return system_trace.current_partition_index
 
     def add_event(self, system_id: str, event: Event):
         """Add an event to the appropriate partition of the system trace."""
-        self.logger.debug(f"Adding event type {event.event_type} to system {system_id}")
-        self.logger.debug(
-            f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
-        )
+        #self.#logger.debug(f"Adding event type {event.event_type} to system {system_id}")
+        # self.#logger.debug(
+        #     f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
+        # )
         #print("Adding event to partition")
 
         #try:
@@ -87,9 +87,9 @@ class EventStore:
 
         try:
             system_trace = self.get_or_create_system_trace(system_id)
-            self.logger.debug(
-                f"Got system trace with {len(system_trace.partition)} partitions"
-            )
+            # self.#logger.debug(
+            #     f"Got system trace with {len(system_trace.partition)} partitions"
+            # )
 
             current_partition = next(
                 (
@@ -110,9 +110,9 @@ class EventStore:
 
             
             current_partition.events.append(event)
-            self.logger.debug(
-                f"Added event to partition {event.partition_index}. Total events: {len(current_partition.events)}"
-            )
+            # self.#logger.debug(
+            #     f"Added event to partition {event.partition_index}. Total events: {len(current_partition.events)}"
+            # )
         finally:
             self._lock.release()
         # except Exception as e:
@@ -128,7 +128,7 @@ class EventStore:
 
     def end_all_active_events(self):
         """End all active events and store them."""
-        self.logger.debug("Ending all active events")
+        #self.#logger.debug("Ending all active events")
         
         # For synchronous code
         if hasattr(_local, "active_events"):
@@ -139,7 +139,7 @@ class EventStore:
                     if event.closed is None:
                         event.closed = time.time()
                         self.add_event(event.system_id, event)
-                        self.logger.debug(f"Stored and closed event {event_type}")
+                        #self.#logger.debug(f"Stored and closed event {event_type}")
                 _local.active_events.clear()
 
         # For asynchronous code
@@ -154,7 +154,7 @@ class EventStore:
                 if event.closed is None:
                     event.closed = time.time()
                     self.add_event(event.system_id, event)
-                    self.logger.debug(f"Stored and closed event {event_type}")
+                    #self.#logger.debug(f"Stored and closed event {event_type}")
             active_events_var.set({})
 
     def get_system_traces_json(self) -> str:

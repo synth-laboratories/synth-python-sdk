@@ -110,7 +110,7 @@ def trace_system_sync(
                 raise ValueError("Instance missing required system_id attribute")
 
             _local.system_id = self_instance.system_id
-            logger.debug(f"Set system_id in thread local: {_local.system_id}")
+            #logger.debug(f"Set system_id in thread local: {_local.system_id}")
 
             # Initialize Trace
             synth_tracker_sync.initialize()
@@ -118,13 +118,13 @@ def trace_system_sync(
             # Initialize active_events if not present
             if not hasattr(_local, "active_events"):
                 _local.active_events = {}
-                logger.debug("Initialized active_events in thread local storage")
+                #logger.debug("Initialized active_events in thread local storage")
 
             event = None
             compute_began = time.time()
             try:
                 if manage_event == "create":
-                    logger.debug("Creating new event")
+                    #logger.debug("Creating new event")
                     event = Event(
                         system_id=_local.system_id,
                         event_type=event_type,
@@ -138,12 +138,12 @@ def trace_system_sync(
                         event.partition_index = event_store.increment_partition(
                             _local.system_id
                         )
-                        logger.debug(
-                            f"Incremented partition to: {event.partition_index}"
-                        )
+                        # logger.debug(
+                        #     f"Incremented partition to: {event.partition_index}"
+                        # )
 
                     set_current_event(event)
-                    logger.debug(f"Created and set new event: {event_type}")
+                    #logger.debug(f"Created and set new event: {event_type}")
 
                 # Automatically trace function inputs
                 bound_args = inspect.signature(func).bind(*args, **kwargs)
@@ -248,9 +248,9 @@ def trace_system_sync(
                                 event.agent_compute_steps.append(compute_step)
                             else:
                                 event.environment_compute_steps.append(compute_step)
-                        logger.debug(
-                            f"Added compute step for {var_origin}: {compute_step.to_dict()}"
-                        )
+                        # logger.debug(
+                        #     f"Added compute step for {var_origin}: {compute_step.to_dict()}"
+                        # )
 
                 # Optionally log the function result
                 if log_result:
@@ -266,9 +266,9 @@ def trace_system_sync(
                     # Store the event
                     if hasattr(_local, "system_id"):
                         event_store.add_event(_local.system_id, current_event)
-                        logger.debug(
-                            f"Stored and closed event {event_type} for system {_local.system_id}"
-                        )
+                        # logger.debug(
+                        #     f"Stored and closed event {event_type} for system {_local.system_id}"
+                        # )
                     del _local.active_events[event_type]
 
                 return result
@@ -276,9 +276,9 @@ def trace_system_sync(
                 logger.error(f"Exception in traced function '{func.__name__}': {e}")
                 raise
             finally:
-                synth_tracker_sync.finalize()
+                #synth_tracker_sync.finalize()
                 if hasattr(_local, "system_id"):
-                    logger.debug(f"Cleaning up system_id: {_local.system_id}")
+                    #logger.debug(f"Cleaning up system_id: {_local.system_id}")
                     delattr(_local, "system_id")
 
         return wrapper
@@ -344,6 +344,26 @@ def trace_system_async(
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
+            # logger.debug(f"Starting async_wrapper for {func.__name__}")
+            # logger.debug(f"Args: {args}")
+            # logger.debug(f"Kwargs: {kwargs}")
+            
+            # Automatically trace function inputs
+            bound_args = inspect.signature(func).bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            #logger.debug(f"Bound args: {bound_args.arguments}")
+            
+            for param, value in bound_args.arguments.items():
+                if param == "self":
+                    continue
+                #logger.debug(f"Tracking input param: {param} = {value}")
+                synth_tracker_async.track_state(
+                    variable_name=param,
+                    variable_value=value,
+                    origin=origin,
+                    io_type="input"
+                )
+
             # Determine the instance (self) if it's a method
             if not hasattr(func, "__self__") or not func.__self__:
                 if not args:
@@ -359,7 +379,7 @@ def trace_system_async(
 
             # Set system_id using context variable
             system_id_token = system_id_var.set(self_instance.system_id)
-            logger.debug(f"Set system_id in context vars: {self_instance.system_id}")
+            #logger.debug(f"Set system_id in context vars: {self_instance.system_id}")
 
             # Initialize AsyncTrace
             synth_tracker_async.initialize()
@@ -368,13 +388,13 @@ def trace_system_async(
             current_active_events = active_events_var.get()
             if not current_active_events:
                 active_events_var.set({})
-                logger.debug("Initialized active_events in context vars")
+                #logger.debug("Initialized active_events in context vars")
 
             event = None
             compute_began = time.time()
             try:
                 if manage_event == "create":
-                    logger.debug("Creating new event")
+                    #logger.debug("Creating new event")
                     event = Event(
                         system_id=self_instance.system_id,
                         event_type=event_type,
@@ -388,12 +408,12 @@ def trace_system_async(
                         event.partition_index = event_store.increment_partition(
                             system_id_var.get()
                         )
-                        logger.debug(
-                            f"Incremented partition to: {event.partition_index}"
-                        )
+                        # logger.debug(
+                        #     f"Incremented partition to: {event.partition_index}"
+                        # )
 
                     set_current_event(event)
-                    logger.debug(f"Created and set new event: {event_type}")
+                    #logger.debug(f"Created and set new event: {event_type}")
 
                 # Automatically trace function inputs
                 bound_args = inspect.signature(func).bind(*args, **kwargs)
@@ -498,9 +518,9 @@ def trace_system_async(
                                 event.agent_compute_steps.append(compute_step)
                             else:
                                 event.environment_compute_steps.append(compute_step)
-                        logger.debug(
-                            f"Added compute step for {var_origin}: {compute_step.to_dict()}"
-                        )
+                        # logger.debug(
+                        #     f"Added compute step for {var_origin}: {compute_step.to_dict()}"
+                        # )
                 # Optionally log the function result
                 if log_result:
                     logger.info(f"Function result: {result}")
@@ -515,9 +535,9 @@ def trace_system_async(
                     # Store the event
                     if system_id_var.get():
                         event_store.add_event(system_id_var.get(), current_event)
-                        logger.debug(
-                            f"Stored and closed event {event_type} for system {system_id_var.get()}"
-                        )
+                        # logger.debug(
+                        #     f"Stored and closed event {event_type} for system {system_id_var.get()}"
+                        # )
                     active_events = active_events_var.get()
                     del active_events[event_type]
                     active_events_var.set(active_events)
@@ -527,10 +547,10 @@ def trace_system_async(
                 logger.error(f"Exception in traced function '{func.__name__}': {e}")
                 raise
             finally:
-                synth_tracker_async.finalize()
+                #synth_tracker_async.finalize()
                 # Reset context variable for system_id
                 system_id_var.reset(system_id_token)
-                logger.debug("Cleaning up system_id from context vars")
+                #logger.debug("Cleaning up system_id from context vars")
         return async_wrapper
     return decorator
 
@@ -550,14 +570,14 @@ def trace_system(
         # Check if the function is async or sync
         if inspect.iscoroutinefunction(func):
             # Use async tracing
-            logger.debug("Using async tracing")
+            #logger.debug("Using async tracing")
             async_decorator = trace_system_async(
                 origin, event_type, log_result, manage_event, increment_partition, verbose
             )
             return async_decorator(func)
         else:
             # Use sync tracing
-            logger.debug("Using sync tracing")
+            #logger.debug("Using sync tracing")
             sync_decorator = trace_system_sync(
                 origin, event_type, log_result, manage_event, increment_partition, verbose
             )
