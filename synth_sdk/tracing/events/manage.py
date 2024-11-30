@@ -48,25 +48,23 @@ def set_current_event(event: Optional["Event"], decorator_type: Literal["sync", 
 
         # If there's an existing event of the same type, end it
         if event.event_type in _local.active_events:
+            if _local.active_events[event.event_type].system_id == event.system_id:
+                logger.debug(f"Found existing event of type {event.event_type}")
+                existing_event = _local.active_events[event.event_type]
+                existing_event.closed = time.time()
+                logger.debug(
+                    f"Closed existing event of type {event.event_type} at {existing_event.closed}"
+                )
 
-            # TODO: Check that the active event has the same system_id as the one we're settting
-
-            logger.debug(f"Found existing event of type {event.event_type}")
-            existing_event = _local.active_events[event.event_type]
-            existing_event.closed = time.time()
-            logger.debug(
-                f"Closed existing event of type {event.event_type} at {existing_event.closed}"
-            )
-
-            # Store the closed event if system_id is present
-            if hasattr(_local, "system_id"):
-                logger.debug(f"Storing closed event for system {_local.system_id}")
-                try:
-                    event_store.add_event(_local.system_id, existing_event)
-                    logger.debug("Successfully stored closed event")
-                except Exception as e:
-                    logger.error(f"Failed to store closed event: {str(e)}")
-                    raise
+                # Store the closed event if system_id is present
+                if hasattr(_local, "system_id"):
+                    logger.debug(f"Storing closed event for system {_local.system_id}")
+                    try:
+                        event_store.add_event(_local.system_id, existing_event)
+                        logger.debug("Successfully stored closed event")
+                    except Exception as e:
+                        logger.error(f"Failed to store closed event: {str(e)}")
+                        raise
 
         # Set the new event
         _local.active_events[event.event_type] = event
