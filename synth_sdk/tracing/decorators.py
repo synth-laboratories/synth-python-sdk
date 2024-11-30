@@ -324,9 +324,7 @@ def trace_system_async(
                         event.partition_index = event_store.increment_partition(
                             system_id_var.get()
                         )
-                        # logger.debug(
-                        #     f"Incremented partition to: {event.partition_index}"
-                        # )
+                        logger.debug(f"Incremented partition to: {event.partition_index}")
 
                     set_current_event(event, decorator_type="async")
                     logger.debug(f"Created and set new event: {event_type}")
