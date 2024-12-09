@@ -119,6 +119,7 @@ class EventPartitionElement:
 @dataclass
 class SystemTrace:
     system_id: str
+    metadata: Optional[Dict[str, Any]]
     partition: List[EventPartitionElement]
     current_partition_index: int = 0  # Track current partition
 
