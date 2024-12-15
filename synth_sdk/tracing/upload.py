@@ -13,6 +13,7 @@ import asyncio
 import sys
 from pympler import asizeof
 from tqdm import tqdm
+import aiohttp
 
 def validate_json(data: dict) -> None:
     #Validate that a dictionary contains only JSON-serializable values.
@@ -37,45 +38,37 @@ def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]
     }
     return payload
 
-async def send_system_traces(
-    dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, upload_id: str
-):
-    # Send all system traces and dataset metadata to the server.
-    # Get the token using the API key
-    token_url = f"{base_url}/v1/auth/token"
-    token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
-    token_response.raise_for_status()
-    access_token = token_response.json()["access_token"]
+async def send_system_traces(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, upload_id: str):
+    async with aiohttp.ClientSession() as session:
+        # Get token
+        token_url = f"{base_url}/v1/auth/token"
+        async with session.get(token_url, headers={"customer_specific_api_key": api_key}) as token_response:
+            token_response.raise_for_status()
+            token_data = await token_response.json()
+            access_token = token_data["access_token"]
 
-    # Send the traces with the token
-    api_url = f"{base_url}/v1/uploads/{upload_id}"
+        # Send traces
+        api_url = f"{base_url}/v1/uploads/{upload_id}"
+        payload = createPayload(dataset, traces)
+        validate_json(payload)
 
-    payload = createPayload(dataset, traces) # Create the payload
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
 
-    validate_json(payload)  # Validate the entire payload
-
-    memory_size = asizeof.asizeof(payload) / 1024 # Memory size in KB
-    logging.info(f"Payload size (in memory): {memory_size:.2f} KB")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {access_token}"
-    }
-
-    try:
-        response = requests.post(api_url, json=payload, headers=headers)
-        response.raise_for_status()
-        logging.info(f"Response status code: {response.status_code}")
-        logging.info(f"Upload ID: {response.json().get('upload_id')}")
-        return response, payload
-    except requests.exceptions.HTTPError as http_err:
-        logging.error(
-            f"HTTP error occurred: {http_err} - Response Content: {response.text}"
-        )
-        raise
-    except Exception as err:
-        logging.error(f"An error occurred: {err}")
-        raise
+        try:
+            async with session.post(api_url, json=payload, headers=headers) as response:
+                response.raise_for_status()
+                response_data = await response.json()
+                logging.info(f"Upload ID: {response_data.get('upload_id')}")
+                return response, payload
+        except aiohttp.ClientResponseError as e:
+            logging.error(f"HTTP error occurred: Status {e.status} - {e.message}")
+            raise
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            raise
 
 def chunk_traces(traces: List[SystemTrace], chunk_size_kb: int = 1024):
     """Split traces into chunks that won't exceed approximately chunk_size_kb when serialized"""
