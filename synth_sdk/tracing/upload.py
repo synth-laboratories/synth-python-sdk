@@ -48,7 +48,7 @@ async def send_system_traces(
     access_token = token_response.json()["access_token"]
 
     # Send the traces with the token
-    api_url = f"{base_url}/v1/uploads/"
+    api_url = f"{base_url}/v1/uploads/{upload_id}"
 
     payload = createPayload(dataset, traces) # Create the payload
 
@@ -59,7 +59,6 @@ async def send_system_traces(
 
     headers = {
         "Content-Type": "application/json",
-        "upload_id": upload_id,
         "Authorization": f"Bearer {access_token}"
     }
 
@@ -119,6 +118,7 @@ async def get_upload_id(base_url: str, api_key: str):
         response = requests.get(api_url, headers=headers)
         response.raise_for_status()
         upload_id = response.json()["upload_id"]
+        print(f"Upload ID retrieved: {upload_id}")
         return upload_id
     except requests.exceptions.HTTPError as e:
         logging.error(f"HTTP error occurred: {e}")
@@ -127,18 +127,35 @@ async def get_upload_id(base_url: str, api_key: str):
         logging.error(f"An error occurred: {e}")
         raise
 
-async def send_system_traces_chunked(dataset: Dataset, traces: List[SystemTrace], 
-                                base_url: str, api_key: str, chunk_size_kb: int = 1024):
+def send_system_traces_chunked(dataset: Dataset, traces: List[SystemTrace], 
+                             base_url: str, api_key: str, chunk_size_kb: int = 1024):
     """Upload traces in chunks to avoid memory issues"""
-    trace_chunks = chunk_traces(traces, chunk_size_kb)
-    upload_id = await get_upload_id(base_url, api_key)
-    tasks = []
-    for chunk in trace_chunks:
-        task = asyncio.create_task(send_system_traces(dataset, chunk, base_url, api_key, upload_id))
-        tasks.append(task)
     
-    results = await asyncio.gather(*tasks)
-    return results
+    async def _async_upload():
+        trace_chunks = chunk_traces(traces, chunk_size_kb)
+        upload_id = await get_upload_id(base_url, api_key)
+        
+        tasks = []
+        for chunk in trace_chunks:
+            task = send_system_traces(dataset, chunk, base_url, api_key, upload_id)
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks)
+        return results[0] if results else (None, None)  # Return first result or None tuple
+
+    # Handle the event loop
+    try:
+        if not is_event_loop_running():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(_async_upload())
+        else:
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(_async_upload())
+    finally:
+        # Only close the loop if we created it
+        if 'loop' in locals() and not is_event_loop_running():
+            loop.close()
 
 class UploadValidator(BaseModel):
     traces: List[Dict[str, Any]]
