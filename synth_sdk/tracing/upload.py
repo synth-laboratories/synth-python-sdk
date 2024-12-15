@@ -12,7 +12,7 @@ from pprint import pprint
 import asyncio
 import sys
 from pympler import asizeof
-
+from tqdm import tqdm
 
 def validate_json(data: dict) -> None:
     #Validate that a dictionary contains only JSON-serializable values.
@@ -136,12 +136,25 @@ def send_system_traces_chunked(dataset: Dataset, traces: List[SystemTrace],
         upload_id = await get_upload_id(base_url, api_key)
         
         tasks = []
+        total_chunks = len(trace_chunks)
+        
+        # Create progress bar
+        progress_bar = tqdm(total=total_chunks, desc="Uploading chunks", unit="chunk")
+        
+        async def upload_with_progress(chunk):
+            result = await send_system_traces(dataset, chunk, base_url, api_key, upload_id)
+            progress_bar.update(1)
+            return result
+        
         for chunk in trace_chunks:
-            task = send_system_traces(dataset, chunk, base_url, api_key, upload_id)
+            task = upload_with_progress(chunk)
             tasks.append(task)
         
-        results = await asyncio.gather(*tasks)
-        return results[0] if results else (None, None)  # Return first result or None tuple
+        try:
+            results = await asyncio.gather(*tasks)
+            return results[0] if results else (None, None)  # Return first result or None tuple
+        finally:
+            progress_bar.close()
 
     # Handle the event loop
     try:
