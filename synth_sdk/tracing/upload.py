@@ -135,19 +135,31 @@ def send_system_traces_chunked(dataset: Dataset, traces: List[SystemTrace],
         progress_bar = tqdm(total=total_chunks, desc="Uploading chunks", unit="chunk")
         
         async def upload_with_progress(chunk):
-            result = await send_system_traces(dataset, chunk, base_url, api_key, upload_id)
-            progress_bar.update(1)
-            return result
-        
-        for chunk in trace_chunks:
-            task = upload_with_progress(chunk)
-            tasks.append(task)
-        
+            try:
+                result = await send_system_traces(dataset, chunk, base_url, api_key, upload_id)
+                progress_bar.update(1)
+                return result
+            except Exception as e:
+                progress_bar.close()
+                raise e
+
         try:
-            results = await asyncio.gather(*tasks)
-            return results[0] if results else (None, None)  # Return first result or None tuple
+            # Create and gather all tasks
+            tasks = [upload_with_progress(chunk) for chunk in trace_chunks]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Check for any exceptions in results
+            for result in results:
+                if isinstance(result, Exception):
+                    raise result
+                    
+            return results[0] if results else (None, None)
         finally:
             progress_bar.close()
+            # Cancel any pending tasks
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
 
     # Handle the event loop
     try:
@@ -161,7 +173,14 @@ def send_system_traces_chunked(dataset: Dataset, traces: List[SystemTrace],
     finally:
         # Only close the loop if we created it
         if 'loop' in locals() and not is_event_loop_running():
-            loop.close()
+            try:
+                # Cancel all pending tasks before closing
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            finally:
+                loop.close()
 
 class UploadValidator(BaseModel):
     traces: List[Dict[str, Any]]
