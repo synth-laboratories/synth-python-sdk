@@ -87,11 +87,11 @@ def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]
     else:
         print(f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}")
 
-def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str):
+def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, verbose: bool = False):
     # Create async function that contains all async operations
     async def _async_operations():
 
-        upload_id, signed_url = await get_upload_id(base_url, api_key)
+        upload_id, signed_url = await get_upload_id(base_url, api_key, verbose)
         load_signed_url(signed_url, dataset, traces)
 
         token_url = f"{base_url}/v1/auth/token"
@@ -114,9 +114,10 @@ def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url:
             signed_url = response.json()["signed_url"]
             status = response.json()["status"]
 
-            print(f"Status: {status}")
-            print(f"Upload ID retrieved: {upload_id}")
-            print(f"Signed URL: {signed_url}")
+            if verbose:
+                print(f"Status: {status}")
+                print(f"Upload ID retrieved: {upload_id}")
+                print(f"Signed URL: {signed_url}")
 
             return upload_id, signed_url
         except requests.exceptions.HTTPError as e:
@@ -140,7 +141,7 @@ def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url:
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(_async_operations())
 
-async def get_upload_id(base_url: str, api_key: str):
+async def get_upload_id(base_url: str, api_key: str, verbose: bool = False):
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
     token_response.raise_for_status()
@@ -157,8 +158,9 @@ async def get_upload_id(base_url: str, api_key: str):
         response.raise_for_status()
         upload_id = response.json()["upload_id"]
         signed_url = response.json()["signed_url"]
-        print(f"Upload ID retrieved: {upload_id}")
-        print(f"Signed URL retrieved: {signed_url}")
+        if verbose:
+            print(f"Upload ID retrieved: {upload_id}")
+            print(f"Signed URL retrieved: {signed_url}")
         return upload_id, signed_url
     except requests.exceptions.HTTPError as e:
         logging.error(f"HTTP error occurred: {e}")
@@ -388,6 +390,7 @@ def upload_helper(
             traces=traces,
             base_url="https://agent-learning.onrender.com",
             api_key=api_key,
+            verbose=verbose,
         )
 
         if verbose:
