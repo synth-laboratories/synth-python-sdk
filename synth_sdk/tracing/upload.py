@@ -6,11 +6,9 @@ import time
 from pprint import pprint
 import asyncio
 import sys
-from pympler import asizeof
-from tqdm import tqdm
 import boto3
 from datetime import datetime
-
+from dotenv import load_dotenv
 from typing import Any, Dict, List
 
 import requests
@@ -19,6 +17,7 @@ from pydantic import BaseModel, validator
 from synth_sdk.tracing.abstractions import Dataset, SystemTrace
 from synth_sdk.tracing.events.store import event_store
 
+load_dotenv()
 
 # NOTE: This may cause memory issues in the future
 def validate_json(data: dict) -> None:
