@@ -28,3 +28,6 @@ alembic>=1.13.3
 zyk>=0.2.10
 #synth_sdk>=0.2.61
 #smallbench>=0.2.11
+boto3>=1.35.71
+botocore>=1.35.71
+tqdm>=4.66.4
