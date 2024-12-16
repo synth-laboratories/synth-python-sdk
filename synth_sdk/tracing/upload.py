@@ -1,30 +1,32 @@
-from typing import List, Dict, Any, Union, Tuple, Coroutine
-from pydantic import BaseModel, validator
-import synth_sdk.config.settings
-import requests
+import asyncio
+import json
 import logging
 import os
 import time
-from synth_sdk.tracing.events.store import event_store
-from synth_sdk.tracing.abstractions import Dataset, SystemTrace
-import json
 from pprint import pprint
-import asyncio
+from typing import Any, Dict, List
+
+import requests
+from pydantic import BaseModel, validator
+
+from synth_sdk.tracing.abstractions import Dataset, SystemTrace
+from synth_sdk.tracing.events.store import event_store
 
 
 def validate_json(data: dict) -> None:
-    #Validate that a dictionary contains only JSON-serializable values.
+    # Validate that a dictionary contains only JSON-serializable values.
 
-    #Args:
+    # Args:
     #    data: Dictionary to validate for JSON serialization
 
-    #Raises:
+    # Raises:
     #    ValueError: If the dictionary contains non-serializable values
-    
+
     try:
         json.dumps(data)
     except (TypeError, OverflowError) as e:
         raise ValueError(f"Contains non-JSON-serializable values: {e}. {data}")
+
 
 def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]:
     payload = {
@@ -35,8 +37,12 @@ def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]
     }
     return payload
 
+
 def send_system_traces(
-    dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, 
+    dataset: Dataset,
+    traces: List[SystemTrace],
+    base_url: str,
+    api_key: str,
 ):
     # Send all system traces and dataset metadata to the server.
     # Get the token using the API key
@@ -50,7 +56,7 @@ def send_system_traces(
     # Send the traces with the token
     api_url = f"{base_url}/v1/uploads/"
 
-    payload = createPayload(dataset, traces) # Create the payload
+    payload = createPayload(dataset, traces)  # Create the payload
 
     validate_json(payload)  # Validate the entire payload
 
@@ -90,6 +96,11 @@ class UploadValidator(BaseModel):
                 raise ValueError("Each trace must have a system_id")
             if "partition" not in trace:
                 raise ValueError("Each trace must have a partition")
+
+            # Validate metadata if present
+            if "metadata" in trace and trace["metadata"] is not None:
+                if not isinstance(trace["metadata"], dict):
+                    raise ValueError("Metadata must be a dictionary")
 
             # Validate partition structure
             partition = trace["partition"]
@@ -157,8 +168,8 @@ class UploadValidator(BaseModel):
 
 
 def validate_upload(traces: List[Dict[str, Any]], dataset: Dict[str, Any]):
-    #Validate the upload format before sending to server.
-    #Raises ValueError if validation fails.
+    # Validate the upload format before sending to server.
+    # Raises ValueError if validation fails.
     try:
         UploadValidator(traces=traces, dataset=dataset)
         return True
@@ -174,47 +185,55 @@ def is_event_loop_running():
         # This exception is raised if no event loop is running
         return False
 
+
 def format_upload_output(dataset, traces):
     # Format questions array
     questions_data = [
-        {
-            "intent": q.intent,
-            "criteria": q.criteria,
-            "question_id": q.question_id
-        } for q in dataset.questions
+        {"intent": q.intent, "criteria": q.criteria, "question_id": q.question_id}
+        for q in dataset.questions
     ]
-    
+
     # Format reward signals array with error handling
     reward_signals_data = [
         {
             "system_id": rs.system_id,
             "reward": rs.reward,
             "question_id": rs.question_id,
-            "annotation": rs.annotation if hasattr(rs, 'annotation') else None
-        } for rs in dataset.reward_signals
+            "annotation": rs.annotation if hasattr(rs, "annotation") else None,
+        }
+        for rs in dataset.reward_signals
     ]
-    
+
     # Format traces array
     traces_data = [
         {
             "system_id": t.system_id,
+            "metadata": t.metadata if t.metadata else None,
             "partition": [
                 {
                     "partition_index": p.partition_index,
-                    "events": [e.to_dict() for e in p.events]
-                } for p in t.partition
-            ]
-        } for t in traces
+                    "events": [e.to_dict() for e in p.events],
+                }
+                for p in t.partition
+            ],
+        }
+        for t in traces
     ]
 
     return questions_data, reward_signals_data, traces_data
 
+
 # Supports calls from both async and sync contexts
-def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+def upload(
+    dataset: Dataset,
+    traces: List[SystemTrace] = [],
+    verbose: bool = False,
+    show_payload: bool = False,
+):
     """Upload all system traces and dataset to the server.
     Returns a tuple of (response, questions_json, reward_signals_json, traces_json)
     Note that you can directly upload questions, reward_signals, and traces to the server using the Website
-    
+
     response is the response from the server.
     questions_json is the formatted questions array
     reward_signals_json is the formatted reward signals array
@@ -222,7 +241,13 @@ def upload(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False
 
     return upload_helper(dataset, traces, verbose, show_payload)
 
-def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool = False, show_payload: bool = False):
+
+def upload_helper(
+    dataset: Dataset,
+    traces: List[SystemTrace] = [],
+    verbose: bool = False,
+    show_payload: bool = False,
+):
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
         raise ValueError("SYNTH_API_KEY environment variable not set")
@@ -245,8 +270,8 @@ def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool 
 
     # Also close any unclosed events in existing traces
     logged_traces = event_store.get_system_traces()
-    traces = logged_traces+ traces
-    #traces = event_store.get_system_traces() if len(traces) == 0 else traces
+    traces = logged_traces + traces
+    # traces = event_store.get_system_traces() if len(traces) == 0 else traces
     current_time = time.time()
     for trace in traces:
         for partition in trace.partition:
@@ -291,10 +316,12 @@ def upload_helper(dataset: Dataset, traces: List[SystemTrace]=[], verbose: bool 
             print("Payload sent to server: ")
             pprint(payload)
 
-        #return response, payload, dataset, traces
-        questions_json, reward_signals_json, traces_json = format_upload_output(dataset, traces)
+        # return response, payload, dataset, traces
+        questions_json, reward_signals_json, traces_json = format_upload_output(
+            dataset, traces
+        )
         return response, questions_json, reward_signals_json, traces_json
-    
+
     except ValueError as e:
         if verbose:
             print("Validation error:", str(e))
