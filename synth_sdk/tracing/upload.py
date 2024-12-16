@@ -13,6 +13,10 @@ from typing import Any, Dict, List
 
 import requests
 from pydantic import BaseModel, validator
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from urllib3.poolmanager import PoolManager
+import ssl
 
 from synth_sdk.tracing.abstractions import Dataset, SystemTrace
 from synth_sdk.tracing.events.store import event_store
@@ -44,54 +48,51 @@ def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]
     }
     return payload
 
-async def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace]):
-    # 1. Create S3 client
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url="https://s3.wasabisys.com",
-        aws_access_key_id=os.getenv("WASABI_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("WASABI_SECRET_KEY"),
-    )
 
-    # 2. Create and validate payload
+class TLSAdapter(HTTPAdapter):
+    def init_poolmanager(self, connections, maxsize, block=False):
+        """Create and initialize the urllib3 PoolManager."""
+        ctx = ssl.create_default_context()
+        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+        self.poolmanager = PoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            ssl_version=ssl.PROTOCOL_TLSv1_2,
+            ssl_context=ctx
+        )
+
+def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]):
     payload = createPayload(dataset, traces)
     validate_json(payload)
+    
+    session = requests.Session()
+    adapter = TLSAdapter()
+    session.mount('https://', adapter)
+    
+    try:
+        response = session.put(
+            signed_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'}
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Error making request: {str(e)}")
+        print(f"Request payload: {payload}")  # Add this for debugging
+        raise
 
-    # 3. Create bucket path with datetime
-    bucket_name = os.getenv("WASABI_BUCKET_NAME")
-    current_time = datetime.now().strftime("%Y_%m_%d_%H%M%S")
-    bucket_path = f"uploads/upload_{current_time}.json"
+    if response.status_code != 200:
+        raise ValueError(f"Failed to load signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}")
+    else:
+        print(f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}")
 
-    # 4. Upload payload to Wasabi
-    s3_client.put_object(
-        Bucket=bucket_name,
-        Key=bucket_path,
-        Body=json.dumps(payload),
-    )
-
-    # 5. Generate a signed URL
-    signed_url = s3_client.generate_presigned_url(
-        'get_object',
-        Params={
-            'Bucket': bucket_name,
-            'Key': bucket_path
-        },
-        ExpiresIn=14400  # URL expires in 4 hours
-    )
-
-    return {
-        'bucket_path': bucket_path,
-        'signed_url': signed_url
-    }
-
-def send_system_traces_s3_wrapper(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str):
+def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str):
     # Create async function that contains all async operations
     async def _async_operations():
 
-        result = await send_system_traces_s3(dataset, traces)
-        bucket_path, signed_url = result['bucket_path'], result['signed_url']
-
-        upload_id = await get_upload_id(base_url, api_key)
+        upload_id, signed_url = await get_upload_id(base_url, api_key)
+        load_signed_url(signed_url, dataset, traces)
 
         token_url = f"{base_url}/v1/auth/token"
         token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
@@ -145,7 +146,7 @@ async def get_upload_id(base_url: str, api_key: str):
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    api_url = f"{base_url}/v1/uploads/get-upload-id"
+    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
@@ -155,8 +156,10 @@ async def get_upload_id(base_url: str, api_key: str):
         response = requests.get(api_url, headers=headers)
         response.raise_for_status()
         upload_id = response.json()["upload_id"]
+        signed_url = response.json()["signed_url"]
         print(f"Upload ID retrieved: {upload_id}")
-        return upload_id
+        print(f"Signed URL retrieved: {signed_url}")
+        return upload_id, signed_url
     except requests.exceptions.HTTPError as e:
         logging.error(f"HTTP error occurred: {e}")
         raise
@@ -380,7 +383,7 @@ def upload_helper(
             print("Upload format validation successful")
 
         # Send to server
-        response, payload = send_system_traces_s3_wrapper(
+        response, payload = send_system_traces_s3(
             dataset=dataset,
             traces=traces,
             base_url="https://agent-learning.onrender.com",
