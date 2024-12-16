@@ -142,15 +142,15 @@ class TrainingQuestion(BaseModel):
     A training question is a question that an agent (system_id) is trying to answer.
     It contains an intent and criteria that the agent is trying to meet.
     '''
+    id: str
     intent: str
     criteria: str
-    question_id: Optional[str] = None
 
     def to_dict(self):
         return {
+            "id": self.id,
             "intent": self.intent,
             "criteria": self.criteria,
-            "question_id": self.question_id,
         }
 
 
@@ -158,7 +158,7 @@ class RewardSignal(BaseModel):
     '''
     A reward signal tells us how well an agent (system_id) is doing on a particular question (question_id).
     '''
-    question_id: Optional[str] = None
+    question_id: str
     system_id: str
     reward: Union[float, int, bool]
     annotation: Optional[str] = None

@@ -275,7 +275,7 @@ def is_event_loop_running():
 def format_upload_output(dataset, traces):
     # Format questions array
     questions_data = [
-        {"intent": q.intent, "criteria": q.criteria, "question_id": q.question_id}
+        {"intent": q.intent, "criteria": q.criteria, "id": q.id}
         for q in dataset.questions
     ]
 
