@@ -108,9 +108,9 @@ def send_system_traces_s3_wrapper(dataset: Dataset, traces: List[SystemTrace], b
 
             upload_id = response.json()["upload_id"]
             signed_url = response.json()["signed_url"]
-            message = response.json()["message"]
+            status = response.json()["status"]
 
-            print(f"Message: {message}")
+            print(f"Status: {status}")
             print(f"Upload ID retrieved: {upload_id}")
             print(f"Signed URL: {signed_url}")
 
