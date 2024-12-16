@@ -1,6 +1,6 @@
 [project]
 name = "synth-sdk"
-version = "0.2.84"
+version = "0.2.85"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
@@ -29,6 +29,9 @@ dependencies = [
     "tqdm>=4.66.4"
 ]
 classifiers = []
+
+[project.urls]
+Homepage = "https://github.com/synth-laboratories/synth-sdk"
 
 [build-system]
 requires = ["hatchling"]
