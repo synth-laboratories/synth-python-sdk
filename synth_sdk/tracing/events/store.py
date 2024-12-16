@@ -31,6 +31,7 @@ class EventStore:
                 #logger.debug(f"Creating new system trace for {system_id}")
                 self._traces[system_id] = SystemTrace(
                     system_id=system_id,
+                    metadata={},
                     partition=[EventPartitionElement(partition_index=0, events=[])],
                     current_partition_index=0,
                 )

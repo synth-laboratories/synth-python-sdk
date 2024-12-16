@@ -72,6 +72,11 @@ class AgentComputeStep(ComputeStep):
     compute_input: List[Union[MessageInputs, ArbitraryInputs]]
     compute_output: List[Union[MessageOutputs, ArbitraryOutputs]]
 
+    def to_dict(self):
+        base_dict = super().to_dict()  # Get the parent class serialization
+        base_dict["model_name"] = self.model_name  # Add model_name
+        return base_dict
+
 
 @dataclass
 class EnvironmentComputeStep(ComputeStep):
@@ -128,6 +133,7 @@ class SystemTrace:
             "system_id": self.system_id,
             "partition": [element.to_dict() for element in self.partition],
             "current_partition_index": self.current_partition_index,
+            "metadata": self.metadata if self.metadata else None
         }
 
 
