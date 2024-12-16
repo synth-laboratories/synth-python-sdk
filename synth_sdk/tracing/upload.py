@@ -4,6 +4,13 @@ import logging
 import os
 import time
 from pprint import pprint
+import asyncio
+import sys
+from pympler import asizeof
+from tqdm import tqdm
+import boto3
+from datetime import datetime
+
 from typing import Any, Dict, List
 
 import requests
@@ -13,6 +20,7 @@ from synth_sdk.tracing.abstractions import Dataset, SystemTrace
 from synth_sdk.tracing.events.store import event_store
 
 
+# NOTE: This may cause memory issues in the future
 def validate_json(data: dict) -> None:
     # Validate that a dictionary contains only JSON-serializable values.
 
@@ -37,49 +45,125 @@ def createPayload(dataset: Dataset, traces: List[SystemTrace]) -> Dict[str, Any]
     }
     return payload
 
-
-def send_system_traces(
-    dataset: Dataset,
-    traces: List[SystemTrace],
-    base_url: str,
-    api_key: str,
-):
-    # Send all system traces and dataset metadata to the server.
-    # Get the token using the API key
-    token_url = f"{base_url}/v1/auth/token"
-    token_response = requests.get(
-        token_url, headers={"customer_specific_api_key": api_key}
+async def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace]):
+    # 1. Create S3 client
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url="https://s3.wasabisys.com",
+        aws_access_key_id=os.getenv("WASABI_ACCESS_KEY"),
+        aws_secret_access_key=os.getenv("WASABI_SECRET_KEY"),
     )
+
+    # 2. Create and validate payload
+    payload = createPayload(dataset, traces)
+    validate_json(payload)
+
+    # 3. Create bucket path with datetime
+    bucket_name = os.getenv("WASABI_BUCKET_NAME")
+    current_time = datetime.now().strftime("%Y_%m_%d_%H%M%S")
+    bucket_path = f"uploads/upload_{current_time}.json"
+
+    # 4. Upload payload to Wasabi
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=bucket_path,
+        Body=json.dumps(payload),
+    )
+
+    # 5. Generate a signed URL
+    signed_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={
+            'Bucket': bucket_name,
+            'Key': bucket_path
+        },
+        ExpiresIn=14400  # URL expires in 4 hours
+    )
+
+    return {
+        'bucket_path': bucket_path,
+        'signed_url': signed_url
+    }
+
+def send_system_traces_s3_wrapper(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str):
+    # Create async function that contains all async operations
+    async def _async_operations():
+
+        result = await send_system_traces_s3(dataset, traces)
+        bucket_path, signed_url = result['bucket_path'], result['signed_url']
+
+        upload_id = await get_upload_id(base_url, api_key)
+
+        token_url = f"{base_url}/v1/auth/token"
+        token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
+        token_response.raise_for_status()
+        access_token = token_response.json()["access_token"]
+
+        api_url = f"{base_url}/v1/uploads/process-upload/{upload_id}"
+        data = {"signed_url": signed_url}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}",
+        }
+
+        try:
+            response = requests.post(api_url, headers=headers, json=data)
+            response.raise_for_status()
+
+            upload_id = response.json()["upload_id"]
+            signed_url = response.json()["signed_url"]
+            status = response.json()["status"]
+
+            print(f"Status: {status}")
+            print(f"Upload ID retrieved: {upload_id}")
+            print(f"Signed URL: {signed_url}")
+
+            return upload_id, signed_url
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"HTTP error occurred: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            raise
+
+    # Run the async operations in an event loop
+    if not is_event_loop_running():
+        # If no event loop is running, create a new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(_async_operations())
+        finally:
+            loop.close()
+    else:
+        # If an event loop is already running, use it
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(_async_operations())
+
+async def get_upload_id(base_url: str, api_key: str):
+    token_url = f"{base_url}/v1/auth/token"
+    token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    # Send the traces with the token
-    api_url = f"{base_url}/v1/uploads/"
-
-    payload = createPayload(dataset, traces)  # Create the payload
-
-    validate_json(payload)  # Validate the entire payload
-
+    api_url = f"{base_url}/v1/uploads/get-upload-id"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
     }
 
     try:
-        response = requests.post(api_url, json=payload, headers=headers)
+        response = requests.get(api_url, headers=headers)
         response.raise_for_status()
-        logging.info(f"Response status code: {response.status_code}")
-        logging.info(f"Upload ID: {response.json().get('upload_id')}")
-        return response, payload
-    except requests.exceptions.HTTPError as http_err:
-        logging.error(
-            f"HTTP error occurred: {http_err} - Response Content: {response.text}"
-        )
+        upload_id = response.json()["upload_id"]
+        print(f"Upload ID retrieved: {upload_id}")
+        return upload_id
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"HTTP error occurred: {e}")
         raise
-    except Exception as err:
-        logging.error(f"An error occurred: {err}")
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
         raise
-
 
 class UploadValidator(BaseModel):
     traces: List[Dict[str, Any]]
@@ -297,7 +381,7 @@ def upload_helper(
             print("Upload format validation successful")
 
         # Send to server
-        response, payload = send_system_traces(
+        response, payload = send_system_traces_s3_wrapper(
             dataset=dataset,
             traces=traces,
             base_url="https://agent-learning.onrender.com",
@@ -316,10 +400,7 @@ def upload_helper(
             print("Payload sent to server: ")
             pprint(payload)
 
-        # return response, payload, dataset, traces
-        questions_json, reward_signals_json, traces_json = format_upload_output(
-            dataset, traces
-        )
+        questions_json, reward_signals_json, traces_json = format_upload_output(dataset, traces)
         return response, questions_json, reward_signals_json, traces_json
 
     except ValueError as e:
