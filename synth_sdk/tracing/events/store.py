@@ -8,9 +8,7 @@ from synth_sdk.tracing.abstractions import Event, EventPartitionElement, SystemT
 from synth_sdk.tracing.local import (  # Import context variables
     _local,
     active_events_var,
-    instance_system_id_var,
     system_id_var,
-    system_name_var,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,25 +21,25 @@ class EventStore:
         self.logger = logging.getLogger(__name__)
 
     def get_or_create_system_trace(
-        self, instance_system_id: str, system_id: str, _already_locked: bool = False
+        self, system_instance_id: str, system_id: str, _already_locked: bool = False
     ) -> SystemTrace:
-        """Get or create a SystemTrace for the given instance_system_id."""
+        """Get or create a SystemTrace for the given system_instance_id."""
         logger = logging.getLogger(__name__)
-        # logger.debug(f"Starting get_or_create_system_trace for {instance_system_id}")
+        # logger.debug(f"Starting get_or_create_system_trace for {system_instance_id}")
 
         def _get_or_create():
             # logger.debug("Inside _get_or_create")
-            if instance_system_id not in self._traces:
-                # logger.debug(f"Creating new system trace for {instance_system_id}")
-                self._traces[instance_system_id] = SystemTrace(
+            if system_instance_id not in self._traces:
+                # logger.debug(f"Creating new system trace for {system_instance_id}")
+                self._traces[system_instance_id] = SystemTrace(
                     system_id=system_id,
-                    instance_system_id=instance_system_id,
+                    system_instance_id=system_instance_id,
                     metadata={},
                     partition=[EventPartitionElement(partition_index=0, events=[])],
                     current_partition_index=0,
                 )
             # logger.debug("Returning system trace")
-            return self._traces[instance_system_id]
+            return self._traces[system_instance_id]
 
         if _already_locked:
             return _get_or_create()
@@ -50,15 +48,15 @@ class EventStore:
                 # logger.debug("Lock acquired in get_or_create_system_trace")
                 return _get_or_create()
 
-    def increment_partition(self, instance_system_id: str, system_id: str) -> int:
+    def increment_partition(self, system_instance_id: str, system_id: str) -> int:
         """Increment the partition index for a system and create new partition element."""
         logger = logging.getLogger(__name__)
-        # logger.debug(f"Starting increment_partition for system {instance_system_id}")
+        # logger.debug(f"Starting increment_partition for system {system_instance_id}")
 
         with self._lock:
             # logger.debug("Lock acquired in increment_partition")
             system_trace = self.get_or_create_system_trace(
-                instance_system_id, system_id, _already_locked=True
+                system_instance_id, system_id, _already_locked=True
             )
             # logger.debug(
             #     f"Got system trace, current index: {system_trace.current_partition_index}"
@@ -78,9 +76,9 @@ class EventStore:
 
             return system_trace.current_partition_index
 
-    def add_event(self, instance_system_id: str, system_id: str, event: Event):
+    def add_event(self, system_instance_id: str, system_id: str, event: Event):
         """Add an event to the appropriate partition of the system trace."""
-        # self.#logger.debug(f"Adding event type {event.event_type} to system {instance_system_id}")
+        # self.#logger.debug(f"Adding event type {event.event_type} to system {system_instance_id}")
         # self.#logger.debug(
         #     f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
         # )
@@ -93,7 +91,7 @@ class EventStore:
 
         try:
             system_trace = self.get_or_create_system_trace(
-                instance_system_id, system_id
+                system_instance_id, system_id
             )
             # self.#logger.debug(
             #     f"Got system trace with {len(system_trace.partition)} partitions"
@@ -140,13 +138,13 @@ class EventStore:
         # For synchronous code
         if hasattr(_local, "active_events"):
             active_events = _local.active_events
-            instance_system_id = getattr(_local, "instance_system_id", None)
+            system_instance_id = getattr(_local, "system_instance_id", None)
             system_id = getattr(_local, "system_id", None)
-            if active_events:  # and instance_system_id:
+            if active_events:  # and system_instance_id:
                 for event_type, event in list(active_events.items()):
                     if event.closed is None:
                         event.closed = time.time()
-                        self.add_event(event.instance_system_id, system_id, event)
+                        self.add_event(event.system_instance_id, system_id, event)
                         # self.#logger.debug(f"Stored and closed event {event_type}")
                 _local.active_events.clear()
 
@@ -154,14 +152,12 @@ class EventStore:
             # For asynchronous code
             active_events_async = active_events_var.get()
 
-            
-
-            if active_events_async:  # and instance_system_id_async:
+            if active_events_async:  # and system_instance_id_async:
                 for event_type, event in list(active_events_async.items()):
                     system_id = system_id_var.get()
                     if event.closed is None:
                         event.closed = time.time()
-                        self.add_event(event.instance_system_id, system_id, event)
+                        self.add_event(event.system_instance_id, system_id, event)
                         # self.#logger.debug(f"Stored and closed event {event_type}")
                 active_events_var.set({})
 
@@ -171,7 +167,7 @@ class EventStore:
             return json.dumps(
                 [
                     {
-                        "instance_system_id": trace.instance_system_id,
+                        "system_instance_id": trace.system_instance_id,
                         "current_partition_index": trace.current_partition_index,
                         "partition": [
                             {

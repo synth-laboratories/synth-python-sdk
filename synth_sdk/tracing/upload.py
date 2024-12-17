@@ -4,7 +4,6 @@ import logging
 import os
 import ssl
 import time
-import uuid
 from pprint import pprint
 from typing import Any, Dict, List
 
@@ -96,9 +95,7 @@ def send_system_traces_s3(
     system_id: str,
     verbose: bool = False,
 ):
-    upload_id, signed_url = get_upload_id(
-        base_url, api_key, system_id, verbose
-    )
+    upload_id, signed_url = get_upload_id(base_url, api_key, system_id, verbose)
     load_signed_url(signed_url, dataset, traces)
 
     token_url = f"{base_url}/v1/auth/token"
@@ -143,7 +140,7 @@ def send_system_traces_s3(
 
 
 def get_upload_id(
-    base_url: str, api_key: str, instance_system_id, verbose: bool = False
+    base_url: str, api_key: str, system_instance_id, verbose: bool = False
 ):
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
@@ -152,7 +149,7 @@ def get_upload_id(
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?instance_system_id={instance_system_id}"
+    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?system_instance_id={system_instance_id}"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
@@ -186,8 +183,8 @@ class UploadValidator(BaseModel):
 
         for trace in traces:
             # Validate required fields in each trace
-            if "instance_system_id" not in trace:
-                raise ValueError("Each trace must have a instance_system_id")
+            if "system_instance_id" not in trace:
+                raise ValueError("Each trace must have a system_instance_id")
             if "partition" not in trace:
                 raise ValueError("Each trace must have a partition")
 
@@ -251,7 +248,7 @@ class UploadValidator(BaseModel):
             raise ValueError("Reward signals must be a list")
 
         for signal in reward_signals:
-            required_signal_fields = ["question_id", "instance_system_id", "reward"]
+            required_signal_fields = ["question_id", "system_instance_id", "reward"]
             missing_fields = [f for f in required_signal_fields if f not in signal]
             if missing_fields:
                 raise ValueError(
@@ -290,7 +287,7 @@ def format_upload_output(dataset, traces):
     # Format reward signals array with error handling
     reward_signals_data = [
         {
-            "instance_system_id": rs.instance_system_id,
+            "system_instance_id": rs.system_instance_id,
             "reward": rs.reward,
             "question_id": rs.question_id,
             "annotation": rs.annotation if hasattr(rs, "annotation") else None,
@@ -301,7 +298,7 @@ def format_upload_output(dataset, traces):
     # Format traces array
     traces_data = [
         {
-            "instance_system_id": t.instance_system_id,
+            "system_instance_id": t.system_instance_id,
             "metadata": t.metadata if t.metadata else None,
             "partition": [
                 {
@@ -353,10 +350,10 @@ def upload_helper(
         for event_type, event in _local.active_events.items():
             if event and event.closed is None:
                 event.closed = time.time()
-                if hasattr(_local, "instance_system_id"):
+                if hasattr(_local, "system_instance_id"):
                     try:
                         event_store.add_event(
-                            _local.instance_system_id, _local.system_id, event
+                            _local.system_instance_id, _local.system_id, event
                         )
                         if verbose:
                             print(f"Closed and stored active event: {event_type}")
@@ -374,7 +371,9 @@ def upload_helper(
             for event in partition.events:
                 if event.closed is None:
                     event.closed = current_time
-                    event_store.add_event(trace.instance_system_id, trace.system_id, event)
+                    event_store.add_event(
+                        trace.system_instance_id, trace.system_id, event
+                    )
                     if verbose:
                         print(f"Closed existing unclosed event: {event.event_type}")
 

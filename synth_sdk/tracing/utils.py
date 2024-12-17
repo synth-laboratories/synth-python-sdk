@@ -2,7 +2,7 @@ import hashlib
 
 
 def get_system_id(system_name: str) -> str:
-    """Create a deterministic instance_system_id from system_name using SHA-256."""
+    """Create a deterministic system_instance_id from system_name using SHA-256."""
     if not system_name:
         raise ValueError("system_name cannot be empty")
     # Create SHA-256 hash of system_name

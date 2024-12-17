@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 
 class TestAgent:
     def __init__(self):
-        self.instance_system_id = "test_agent_sync"
+        self.system_instance_id = "test_agent_sync"
         logger.debug(
-            "Initializing TestAgent with instance_system_id: %s",
-            self.instance_system_id,
+            "Initializing TestAgent with system_instance_id: %s",
+            self.system_instance_id,
         )
 
         # Initialize OpenAI client instead of LM
@@ -135,7 +135,7 @@ def run_test():
             reward_signals=[
                 RewardSignal(
                     question_id=f"q{i}",
-                    instance_system_id=agent.instance_system_id,
+                    system_instance_id=agent.system_instance_id,
                     reward=1.0,
                     annotation="Test reward",
                 )
@@ -194,9 +194,9 @@ def run_test():
                 logger.debug("Cleaning up event: %s", event_type)
                 if event.closed is None:
                     event.closed = time.time()
-                    if hasattr(_local, "instance_system_id"):
+                    if hasattr(_local, "system_instance_id"):
                         try:
-                            event_store.add_event(_local.instance_system_id, event)
+                            event_store.add_event(_local.system_instance_id, event)
                             logger.debug(
                                 "Successfully cleaned up event: %s", event_type
                             )

@@ -1,6 +1,6 @@
 [
     {
-        "instance_system_id": "test_agent_sync",
+        "system_instance_id": "test_agent_sync",
         "partition": [
             {
                 "partition_index": 0,

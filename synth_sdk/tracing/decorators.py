@@ -5,7 +5,6 @@ import time
 from functools import wraps
 from typing import Any, Callable, Dict, List, Literal
 
-
 from synth_sdk.tracing.abstractions import (
     AgentComputeStep,
     ArbitraryInputs,
@@ -20,16 +19,16 @@ from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.local import (
     _local,
     active_events_var,
-    instance_system_id_var,
     logger,
-    system_name_var,
     system_id_var,
+    system_instance_id_var,
+    system_name_var,
 )
-from synth_sdk.tracing.utils import get_system_id
 from synth_sdk.tracing.trackers import (
     synth_tracker_async,
     synth_tracker_sync,
 )
+from synth_sdk.tracing.utils import get_system_id
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +62,17 @@ def trace_system_sync(
                 self_instance = func.__self__
 
             # Ensure required attributes are present
-            required_attrs = ["instance_system_id", "system_name"]
+            required_attrs = ["system_instance_id", "system_name"]
             for attr in required_attrs:
                 if not hasattr(self_instance, attr):
                     raise ValueError(f"Instance missing required attribute '{attr}'")
 
             # Set thread-local variables
-            _local.instance_system_id = self_instance.instance_system_id
+            _local.system_instance_id = self_instance.system_instance_id
             _local.system_name = self_instance.system_name
             _local.system_id = get_system_id(
                 self_instance.system_name
-            )#self_instance.system_id
+            )  # self_instance.system_id
 
             # Initialize Trace
             synth_tracker_sync.initialize()
@@ -89,7 +88,7 @@ def trace_system_sync(
                 if manage_event == "create":
                     # logger.debug("Creating new event")
                     event = Event(
-                        instance_system_id=_local.instance_system_id,
+                        system_instance_id=_local.system_instance_id,
                         event_type=event_type,
                         opened=compute_began,
                         closed=None,
@@ -99,7 +98,7 @@ def trace_system_sync(
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
-                            _local.instance_system_id,
+                            _local.system_instance_id,
                             _local.system_id,
                         )
                         logger.debug(
@@ -226,10 +225,12 @@ def trace_system_sync(
                     current_event = _local.active_events[event_type]
                     current_event.closed = compute_ended
                     # Store the event
-                    if hasattr(_local, "instance_system_id"):
-                        event_store.add_event(_local.instance_system_id, _local.system_id, current_event)
+                    if hasattr(_local, "system_instance_id"):
+                        event_store.add_event(
+                            _local.system_instance_id, _local.system_id, current_event
+                        )
                         # logger.debug(
-                        #     f"Stored and closed event {event_type} for system {_local.instance_system_id}"
+                        #     f"Stored and closed event {event_type} for system {_local.system_instance_id}"
                         # )
                     del _local.active_events[event_type]
 
@@ -239,9 +240,9 @@ def trace_system_sync(
                 raise
             finally:
                 # synth_tracker_sync.finalize()
-                if hasattr(_local, "instance_system_id"):
-                    # logger.debug(f"Cleaning up instance_system_id: {_local.instance_system_id}")
-                    delattr(_local, "instance_system_id")
+                if hasattr(_local, "system_instance_id"):
+                    # logger.debug(f"Cleaning up system_instance_id: {_local.system_instance_id}")
+                    delattr(_local, "system_instance_id")
 
         return wrapper
 
@@ -276,17 +277,19 @@ def trace_system_async(
                 self_instance = func.__self__
 
             # Ensure required attributes are present
-            required_attrs = ["instance_system_id", "system_name"]
+            required_attrs = ["system_instance_id", "system_name"]
             for attr in required_attrs:
                 if not hasattr(self_instance, attr):
                     raise ValueError(f"Instance missing required attribute '{attr}'")
 
             # Set context variables
-            instance_system_id_token = instance_system_id_var.set(
-                self_instance.instance_system_id
+            system_instance_id_token = system_instance_id_var.set(
+                self_instance.system_instance_id
             )
             system_name_token = system_name_var.set(self_instance.system_name)
-            system_id_token = system_id_var.set(get_system_id(self_instance.system_name))
+            system_id_token = system_id_var.set(
+                get_system_id(self_instance.system_name)
+            )
 
             # Initialize AsyncTrace
             synth_tracker_async.initialize()
@@ -303,7 +306,7 @@ def trace_system_async(
                 if manage_event == "create":
                     # logger.debug("Creating new event")
                     event = Event(
-                        instance_system_id=self_instance.instance_system_id,
+                        system_instance_id=self_instance.system_instance_id,
                         event_type=event_type,
                         opened=compute_began,
                         closed=None,
@@ -313,8 +316,7 @@ def trace_system_async(
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
-                            instance_system_id_var.get(),
-                            system_id_var.get()
+                            system_instance_id_var.get(), system_id_var.get()
                         )
                         logger.debug(
                             f"Incremented partition to: {event.partition_index}"
@@ -442,11 +444,11 @@ def trace_system_async(
                     current_event = active_events_var.get()[event_type]
                     current_event.closed = compute_ended
                     # Store the event
-                    if instance_system_id_var.get():
+                    if system_instance_id_var.get():
                         event_store.add_event(
-                            instance_system_id_var.get(), 
+                            system_instance_id_var.get(),
                             system_id_var.get(),
-                            current_event
+                            current_event,
                         )
                     active_events = active_events_var.get()
                     del active_events[event_type]
@@ -459,10 +461,10 @@ def trace_system_async(
             finally:
                 # synth_tracker_async.finalize()
                 # Reset context variables
-                instance_system_id_var.reset(instance_system_id_token)
+                system_instance_id_var.reset(system_instance_id_token)
                 system_name_var.reset(system_name_token)
                 system_id_var.reset(system_id_token)
-                # logger.debug("Cleaning up instance_system_id from context vars")
+                # logger.debug("Cleaning up system_instance_id from context vars")
 
         return async_wrapper
 

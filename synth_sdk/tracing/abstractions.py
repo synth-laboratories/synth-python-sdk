@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -93,7 +92,7 @@ class EnvironmentComputeStep(ComputeStep):
 
 @dataclass
 class Event:
-    instance_system_id: str
+    system_instance_id: str
     event_type: str
     opened: Any  # timestamp
     closed: Any  # timestamp
@@ -135,7 +134,7 @@ class EventPartitionElement:
 @dataclass
 class SystemTrace:
     system_id: str
-    instance_system_id: str
+    system_instance_id: str
     metadata: Optional[Dict[str, Any]]
     partition: List[EventPartitionElement]
     current_partition_index: int = 0  # Track current partition
@@ -143,7 +142,7 @@ class SystemTrace:
     def to_dict(self):
         return {
             "system_id": self.system_id,
-            "instance_system_id": self.instance_system_id,
+            "system_instance_id": self.system_instance_id,
             "partition": [element.to_dict() for element in self.partition],
             "current_partition_index": self.current_partition_index,
             "metadata": self.metadata if self.metadata else None,
@@ -152,7 +151,7 @@ class SystemTrace:
 
 class TrainingQuestion(BaseModel):
     """
-    A training question is a question that an agent (instance_system_id) is trying to answer.
+    A training question is a question that an agent (system_instance_id) is trying to answer.
     It contains an intent and criteria that the agent is trying to meet.
     """
 
@@ -170,18 +169,18 @@ class TrainingQuestion(BaseModel):
 
 class RewardSignal(BaseModel):
     """
-    A reward signal tells us how well an agent (instance_system_id) is doing on a particular question (question_id).
+    A reward signal tells us how well an agent (system_instance_id) is doing on a particular question (question_id).
     """
 
     question_id: str
-    instance_system_id: str
+    system_instance_id: str
     reward: Union[float, int, bool]
     annotation: Optional[str] = None
 
     def to_dict(self):
         return {
             "question_id": self.question_id,
-            "instance_system_id": self.instance_system_id,
+            "system_instance_id": self.system_instance_id,
             "reward": self.reward,
             "annotation": self.annotation,
         }

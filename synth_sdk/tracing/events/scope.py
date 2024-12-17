@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from synth_sdk.tracing.abstractions import Event
 from synth_sdk.tracing.decorators import _local, clear_current_event, set_current_event
 from synth_sdk.tracing.events.store import event_store
-from synth_sdk.tracing.local import instance_system_id_var, system_id_var
+from synth_sdk.tracing.local import system_id_var, system_instance_id_var
 
 
 @contextmanager
@@ -25,20 +25,16 @@ def event_scope(event_type: str):
     except RuntimeError:
         is_async = False
 
-    # Get instance_system_id from appropriate source
-    instance_system_id = (
-        instance_system_id_var.get()
+    # Get system_instance_id from appropriate source
+    system_instance_id = (
+        system_instance_id_var.get()
         if is_async
-        else getattr(_local, "instance_system_id", None)
+        else getattr(_local, "system_instance_id", None)
     )
-    system_id = (
-        system_id_var.get()
-        if is_async
-        else getattr(_local, "system_id", None)
-    )
+    system_id = system_id_var.get() if is_async else getattr(_local, "system_id", None)
 
     event = Event(
-        instance_system_id=instance_system_id,
+        system_instance_id=system_instance_id,
         event_type=event_type,
         opened=time.time(),
         closed=None,
@@ -53,6 +49,6 @@ def event_scope(event_type: str):
     finally:
         event.closed = time.time()
         clear_current_event(event_type)
-        # Store the event if instance_system_id is available
-        if instance_system_id:
-            event_store.add_event(instance_system_id, system_id, event)
+        # Store the event if system_instance_id is available
+        if system_instance_id:
+            event_store.add_event(system_instance_id, system_id, event)

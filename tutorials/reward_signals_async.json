@@ -1,18 +1,18 @@
 [
     {
-        "instance_system_id": "test_agent_async",
+        "system_instance_id": "test_agent_async",
         "reward": 1.0,
         "question_id": "q0",
         "annotation": "Test reward"
     },
     {
-        "instance_system_id": "test_agent_async",
+        "system_instance_id": "test_agent_async",
         "reward": 1.0,
         "question_id": "q1",
         "annotation": "Test reward"
     },
     {
-        "instance_system_id": "test_agent_async",
+        "system_instance_id": "test_agent_async",
         "reward": 1.0,
         "question_id": "q2",
         "annotation": "Test reward"
