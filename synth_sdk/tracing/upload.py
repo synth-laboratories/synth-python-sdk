@@ -87,11 +87,11 @@ def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]
     else:
         print(f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}")
 
-def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, verbose: bool = False):
+def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, system_id: str, verbose: bool = False):
     # Create async function that contains all async operations
     async def _async_operations():
 
-        upload_id, signed_url = await get_upload_id(base_url, api_key, verbose)
+        upload_id, signed_url = await get_upload_id(base_url, api_key, system_id, verbose)
         load_signed_url(signed_url, dataset, traces)
 
         token_url = f"{base_url}/v1/auth/token"
@@ -141,13 +141,13 @@ def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url:
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(_async_operations())
 
-async def get_upload_id(base_url: str, api_key: str, verbose: bool = False):
+async def get_upload_id(base_url: str, api_key: str, system_id, verbose: bool = False):
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url"
+    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?system_id={system_id}"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
@@ -390,6 +390,7 @@ def upload_helper(
             traces=traces,
             base_url="https://agent-learning.onrender.com",
             api_key=api_key,
+            special_system_id=special_system_id,
             verbose=verbose,
         )
 
