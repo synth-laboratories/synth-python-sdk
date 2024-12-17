@@ -2,26 +2,23 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 import time
+import uuid
 from pprint import pprint
-import asyncio
-import sys
-import boto3
-from datetime import datetime
-from dotenv import load_dotenv
 from typing import Any, Dict, List
 
 import requests
+from dotenv import load_dotenv
 from pydantic import BaseModel, validator
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from urllib3.poolmanager import PoolManager
-import ssl
 
 from synth_sdk.tracing.abstractions import Dataset, SystemTrace
 from synth_sdk.tracing.events.store import event_store
 
 load_dotenv()
+
 
 # NOTE: This may cause memory issues in the future
 def validate_json(data: dict) -> None:
@@ -53,28 +50,27 @@ class TLSAdapter(HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=False):
         """Create and initialize the urllib3 PoolManager."""
         ctx = ssl.create_default_context()
-        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+        ctx.set_ciphers("DEFAULT@SECLEVEL=1")
         self.poolmanager = PoolManager(
             num_pools=connections,
             maxsize=maxsize,
             block=block,
             ssl_version=ssl.PROTOCOL_TLSv1_2,
-            ssl_context=ctx
+            ssl_context=ctx,
         )
+
 
 def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]):
     payload = createPayload(dataset, traces)
     validate_json(payload)
-    
+
     session = requests.Session()
     adapter = TLSAdapter()
-    session.mount('https://', adapter)
-    
+    session.mount("https://", adapter)
+
     try:
         response = session.put(
-            signed_url,
-            json=payload,
-            headers={'Content-Type': 'application/json'}
+            signed_url, json=payload, headers={"Content-Type": "application/json"}
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
@@ -83,71 +79,80 @@ def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]
         raise
 
     if response.status_code != 200:
-        raise ValueError(f"Failed to load signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}")
+        raise ValueError(
+            f"Failed to load signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
+        )
     else:
-        print(f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}")
+        print(
+            f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
+        )
 
-def send_system_traces_s3(dataset: Dataset, traces: List[SystemTrace], base_url: str, api_key: str, system_id: str, verbose: bool = False):
-    # Create async function that contains all async operations
-    async def _async_operations():
 
-        upload_id, signed_url = await get_upload_id(base_url, api_key, system_id, verbose)
-        load_signed_url(signed_url, dataset, traces)
+def send_system_traces_s3(
+    dataset: Dataset,
+    traces: List[SystemTrace],
+    base_url: str,
+    api_key: str,
+    system_id: str,
+    verbose: bool = False,
+):
+    upload_id, signed_url = get_upload_id(
+        base_url, api_key, system_id, verbose
+    )
+    load_signed_url(signed_url, dataset, traces)
 
-        token_url = f"{base_url}/v1/auth/token"
-        token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
+    token_url = f"{base_url}/v1/auth/token"
+    try:
+        token_response = requests.get(
+            token_url, headers={"customer_specific_api_key": api_key}
+        )
         token_response.raise_for_status()
         access_token = token_response.json()["access_token"]
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error obtaining access token: {e}")
+        raise
 
-        api_url = f"{base_url}/v1/uploads/process-upload/{upload_id}"
-        data = {"signed_url": signed_url}
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}",
-        }
+    api_url = f"{base_url}/v1/uploads/process-upload/{upload_id}"
+    data = {"signed_url": signed_url}
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
 
-        try:
-            response = requests.post(api_url, headers=headers, json=data)
-            response.raise_for_status()
+    try:
+        response = requests.post(api_url, headers=headers, json=data)
+        response.raise_for_status()
 
-            upload_id = response.json()["upload_id"]
-            signed_url = response.json()["signed_url"]
-            status = response.json()["status"]
+        response_data = response.json()
+        upload_id = response_data.get("upload_id")
+        signed_url = response_data.get("signed_url")
+        status = response_data.get("status")
 
-            if verbose:
-                print(f"Status: {status}")
-                print(f"Upload ID retrieved: {upload_id}")
-                print(f"Signed URL: {signed_url}")
+        if verbose:
+            print(f"Status: {status}")
+            print(f"Upload ID retrieved: {upload_id}")
+            print(f"Signed URL: {signed_url}")
 
-            return upload_id, signed_url
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTP error occurred: {e}")
-            raise
-        except Exception as e:
-            logging.error(f"An error occurred: {e}")
-            raise
+        return upload_id, signed_url
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"HTTP error occurred: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        raise
 
-    # Run the async operations in an event loop
-    if not is_event_loop_running():
-        # If no event loop is running, create a new one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(_async_operations())
-        finally:
-            loop.close()
-    else:
-        # If an event loop is already running, use it
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(_async_operations())
 
-async def get_upload_id(base_url: str, api_key: str, system_id, verbose: bool = False):
+def get_upload_id(
+    base_url: str, api_key: str, instance_system_id, verbose: bool = False
+):
     token_url = f"{base_url}/v1/auth/token"
-    token_response = requests.get(token_url, headers={"customer_specific_api_key": api_key})
+    token_response = requests.get(
+        token_url, headers={"customer_specific_api_key": api_key}
+    )
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?system_id={system_id}"
+    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?instance_system_id={instance_system_id}"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
@@ -169,6 +174,7 @@ async def get_upload_id(base_url: str, api_key: str, system_id, verbose: bool = 
         logging.error(f"An error occurred: {e}")
         raise
 
+
 class UploadValidator(BaseModel):
     traces: List[Dict[str, Any]]
     dataset: Dict[str, Any]
@@ -180,8 +186,8 @@ class UploadValidator(BaseModel):
 
         for trace in traces:
             # Validate required fields in each trace
-            if "system_id" not in trace:
-                raise ValueError("Each trace must have a system_id")
+            if "instance_system_id" not in trace:
+                raise ValueError("Each trace must have a instance_system_id")
             if "partition" not in trace:
                 raise ValueError("Each trace must have a partition")
 
@@ -245,7 +251,7 @@ class UploadValidator(BaseModel):
             raise ValueError("Reward signals must be a list")
 
         for signal in reward_signals:
-            required_signal_fields = ["question_id", "system_id", "reward"]
+            required_signal_fields = ["question_id", "instance_system_id", "reward"]
             missing_fields = [f for f in required_signal_fields if f not in signal]
             if missing_fields:
                 raise ValueError(
@@ -284,7 +290,7 @@ def format_upload_output(dataset, traces):
     # Format reward signals array with error handling
     reward_signals_data = [
         {
-            "system_id": rs.system_id,
+            "instance_system_id": rs.instance_system_id,
             "reward": rs.reward,
             "question_id": rs.question_id,
             "annotation": rs.annotation if hasattr(rs, "annotation") else None,
@@ -295,7 +301,7 @@ def format_upload_output(dataset, traces):
     # Format traces array
     traces_data = [
         {
-            "system_id": t.system_id,
+            "instance_system_id": t.instance_system_id,
             "metadata": t.metadata if t.metadata else None,
             "partition": [
                 {
@@ -347,9 +353,11 @@ def upload_helper(
         for event_type, event in _local.active_events.items():
             if event and event.closed is None:
                 event.closed = time.time()
-                if hasattr(_local, "system_id"):
+                if hasattr(_local, "instance_system_id"):
                     try:
-                        event_store.add_event(_local.system_id, event)
+                        event_store.add_event(
+                            _local.instance_system_id, _local.system_id, event
+                        )
                         if verbose:
                             print(f"Closed and stored active event: {event_type}")
                     except Exception as e:
@@ -366,7 +374,7 @@ def upload_helper(
             for event in partition.events:
                 if event.closed is None:
                     event.closed = current_time
-                    event_store.add_event(trace.system_id, event)
+                    event_store.add_event(trace.instance_system_id, trace.system_id, event)
                     if verbose:
                         print(f"Closed existing unclosed event: {event.event_type}")
 
@@ -390,7 +398,7 @@ def upload_helper(
             traces=traces,
             base_url="https://agent-learning.onrender.com",
             api_key=api_key,
-            special_system_id=special_system_id,
+            system_id=traces[0].system_id,
             verbose=verbose,
         )
 
@@ -406,7 +414,9 @@ def upload_helper(
             print("Payload sent to server: ")
             pprint(payload)
 
-        questions_json, reward_signals_json, traces_json = format_upload_output(dataset, traces)
+        questions_json, reward_signals_json, traces_json = format_upload_output(
+            dataset, traces
+        )
         return response, questions_json, reward_signals_json, traces_json
 
     except ValueError as e:
