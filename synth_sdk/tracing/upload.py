@@ -342,6 +342,9 @@ def upload_helper(
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
         raise ValueError("SYNTH_API_KEY environment variable not set")
+    base_url = os.getenv(
+        "SYNTH_ENDPOINT_OVERRIDE", "https://agent-learning.onrender.com"
+    )
 
     # End all active events before uploading
     from synth_sdk.tracing.decorators import _local
@@ -395,7 +398,7 @@ def upload_helper(
         response, payload = send_system_traces_s3(
             dataset=dataset,
             traces=traces,
-            base_url="https://agent-learning.onrender.com",
+            base_url=base_url,
             api_key=api_key,
             system_id=traces[0].system_id,
             verbose=verbose,
