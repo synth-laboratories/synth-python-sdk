@@ -140,7 +140,7 @@ def send_system_traces_s3(
 
 
 def get_upload_id(
-    base_url: str, api_key: str, system_instance_id, verbose: bool = False
+    base_url: str, api_key: str, system_id, verbose: bool = False
 ):
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
@@ -149,7 +149,7 @@ def get_upload_id(
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?system_instance_id={system_instance_id}"
+    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?system_id={system_id}"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
