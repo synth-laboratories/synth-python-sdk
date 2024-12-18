@@ -1,11 +1,9 @@
-import hashlib
+import uuid
 
 
 def get_system_id(system_name: str) -> str:
-    """Create a deterministic system_instance_id from system_name using SHA-256."""
+    """Create a deterministic system_instance_id from system_name using UUID5."""
     if not system_name:
         raise ValueError("system_name cannot be empty")
-    # Create SHA-256 hash of system_name
-    hash_object = hashlib.sha256(system_name.encode())
-    # Take the first 16 characters of the hex digest for a shorter but still unique ID
-    return hash_object.hexdigest()[:16]
+    system_id = uuid.uuid5(uuid.NAMESPACE_DNS, system_name)
+    return str(system_id)
