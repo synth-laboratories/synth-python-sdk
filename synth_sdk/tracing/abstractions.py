@@ -133,6 +133,7 @@ class EventPartitionElement:
 
 @dataclass
 class SystemTrace:
+    system_name: str
     system_id: str
     system_instance_id: str
     metadata: Optional[Dict[str, Any]]
@@ -141,6 +142,7 @@ class SystemTrace:
 
     def to_dict(self):
         return {
+            "system_name": self.system_name,
             "system_id": self.system_id,
             "system_instance_id": self.system_instance_id,
             "partition": [element.to_dict() for element in self.partition],

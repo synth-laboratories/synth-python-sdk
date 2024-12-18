@@ -64,7 +64,7 @@ def set_current_event(
                     )
                     try:
                         event_store.add_event(
-                            _local.system_instance_id, _local.system_id, existing_event
+                            _local.system_name, _local.system_id, _local.system_instance_id, existing_event
                         )
                         logger.debug("Successfully stored closed event")
                     except Exception as e:
@@ -78,6 +78,7 @@ def set_current_event(
     else:
         from synth_sdk.tracing.local import (
             active_events_var,
+            system_name_var,
             system_id_var,
             system_instance_id_var,
         )
@@ -105,7 +106,7 @@ def set_current_event(
                     )
                     try:
                         event_store.add_event(
-                            system_instance_id, system_id_var.get(), existing_event
+                            system_name_var.get(), system_id_var.get(), system_instance_id, existing_event
                         )
                         logger.debug("Successfully stored closed event")
                     except Exception as e:
@@ -132,7 +133,7 @@ def end_event(event_type: str) -> Optional[Event]:
         # Store the event
         if hasattr(_local, "system_instance_id"):
             event_store.add_event(
-                _local.system_instance_id, _local.system_id, current_event
+                _local.system_name, _local.system_id, _local.system_instance_id, current_event
             )
         clear_current_event(event_type)
     return current_event

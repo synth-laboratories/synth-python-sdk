@@ -188,7 +188,7 @@ async def run_test():
                     event.closed = time.time()
                     if hasattr(_local, "system_instance_id"):
                         try:
-                            event_store.add_event(_local.system_instance_id, event)
+                            event_store.add_event(_local.system_name, _local.system_id, _local.system_instance_id, event)
                             logger.debug(
                                 "Successfully cleaned up event: %s", event_type
                             )

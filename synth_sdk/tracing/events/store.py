@@ -21,7 +21,11 @@ class EventStore:
         self.logger = logging.getLogger(__name__)
 
     def get_or_create_system_trace(
-        self, system_instance_id: str, system_id: str, _already_locked: bool = False
+        self, 
+        system_name: str,
+        system_id: str, 
+        system_instance_id: str,
+        _already_locked: bool = False
     ) -> SystemTrace:
         """Get or create a SystemTrace for the given system_instance_id."""
         logger = logging.getLogger(__name__)
@@ -32,6 +36,7 @@ class EventStore:
             if system_instance_id not in self._traces:
                 # logger.debug(f"Creating new system trace for {system_instance_id}")
                 self._traces[system_instance_id] = SystemTrace(
+                    system_name=system_name,
                     system_id=system_id,
                     system_instance_id=system_instance_id,
                     metadata={},
@@ -48,7 +53,7 @@ class EventStore:
                 # logger.debug("Lock acquired in get_or_create_system_trace")
                 return _get_or_create()
 
-    def increment_partition(self, system_instance_id: str, system_id: str) -> int:
+    def increment_partition(self, system_name: str, system_id: str, system_instance_id: str) -> int:
         """Increment the partition index for a system and create new partition element."""
         logger = logging.getLogger(__name__)
         # logger.debug(f"Starting increment_partition for system {system_instance_id}")
@@ -56,7 +61,7 @@ class EventStore:
         with self._lock:
             # logger.debug("Lock acquired in increment_partition")
             system_trace = self.get_or_create_system_trace(
-                system_instance_id, system_id, _already_locked=True
+                system_name, system_id, system_instance_id, _already_locked=True
             )
             # logger.debug(
             #     f"Got system trace, current index: {system_trace.current_partition_index}"
@@ -76,7 +81,7 @@ class EventStore:
 
             return system_trace.current_partition_index
 
-    def add_event(self, system_instance_id: str, system_id: str, event: Event):
+    def add_event(self, system_name: str, system_id: str, system_instance_id: str, event: Event):
         """Add an event to the appropriate partition of the system trace."""
         # self.#logger.debug(f"Adding event type {event.event_type} to system {system_instance_id}")
         # self.#logger.debug(
@@ -91,7 +96,7 @@ class EventStore:
 
         try:
             system_trace = self.get_or_create_system_trace(
-                system_instance_id, system_id
+                system_name, system_id, system_instance_id, _already_locked=True
             )
             # self.#logger.debug(
             #     f"Got system trace with {len(system_trace.partition)} partitions"
@@ -139,25 +144,26 @@ class EventStore:
         if hasattr(_local, "active_events"):
             active_events = _local.active_events
             system_instance_id = getattr(_local, "system_instance_id", None)
+            system_name = getattr(_local, "system_name", None)
             system_id = getattr(_local, "system_id", None)
             if active_events:  # and system_instance_id:
                 for event_type, event in list(active_events.items()):
                     if event.closed is None:
                         event.closed = time.time()
-                        self.add_event(event.system_instance_id, system_id, event)
+                        self.add_event(system_name, system_id, event.system_instance_id, event)
                         # self.#logger.debug(f"Stored and closed event {event_type}")
                 _local.active_events.clear()
 
         else:
             # For asynchronous code
             active_events_async = active_events_var.get()
-
+            print("Active events async:", active_events_async.items())
             if active_events_async:  # and system_instance_id_async:
                 for event_type, event in list(active_events_async.items()):
                     system_id = system_id_var.get()
                     if event.closed is None:
                         event.closed = time.time()
-                        self.add_event(event.system_instance_id, system_id, event)
+                        self.add_event(system_name, system_id, event.system_instance_id, event)
                         # self.#logger.debug(f"Stored and closed event {event_type}")
                 active_events_var.set({})
 

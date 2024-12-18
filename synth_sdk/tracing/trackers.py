@@ -38,7 +38,7 @@ class SynthTrackerSync:
                 "model_name": model_name,
                 "finetune": finetune,
             })
-            #logger.debug("Tracked LM interaction")
+            # logger.debug("Tracked LM interaction")
         else:
             pass
             # raise RuntimeError(
@@ -67,7 +67,7 @@ class SynthTrackerSync:
                 "variable_value": variable_value,
                 "annotation": annotation,
             })
-            #logger.debug(f"Tracked state: {variable_name}")
+            # logger.debug(f"Tracked state: {variable_name}")
         else:
             pass
             # raise RuntimeError(
@@ -84,7 +84,7 @@ class SynthTrackerSync:
         cls._local.initialized = False
         cls._local.inputs = []
         cls._local.outputs = []
-        #logger.debug("Finalized trace data")
+        # logger.debug("Finalized trace data")
 
 
 # Context variables for asynchronous tracing
@@ -104,7 +104,7 @@ class SynthTrackerAsync:
         trace_initialized_var.set(True)
         trace_inputs_var.set([])  # List of tuples: (origin, var)
         trace_outputs_var.set([])  # List of tuples: (origin, var)
-        #logger.debug("AsyncTrace initialized")
+        # logger.debug("AsyncTrace initialized")
 
     @classmethod
     def track_lm(
@@ -122,7 +122,7 @@ class SynthTrackerAsync:
                 "finetune": finetune,
             })
             trace_inputs_var.set(trace_inputs)
-            #logger.debug("Tracked LM interaction")
+            # logger.debug("Tracked LM interaction")
         else:
             pass
             # raise RuntimeError(
@@ -164,7 +164,7 @@ class SynthTrackerAsync:
                     "annotation": annotation,
                 })
                 trace_outputs_var.set(trace_outputs)
-            #logger.debug(f"Tracked state: {variable_name}")
+            # logger.debug(f"Tracked state: {variable_name}")
         else:
             pass
             # raise RuntimeError(
@@ -182,7 +182,7 @@ class SynthTrackerAsync:
         trace_initialized_var.set(False)
         trace_inputs_var.set([])
         trace_outputs_var.set([])
-        logger.debug("Finalized async trace data")
+        # logger.debug("Finalized async trace data")
 
 
 # Make traces available globally
@@ -246,10 +246,10 @@ class SynthTracker:
             ```
         """
         if cls.is_called_by_async() and trace_initialized_var.get():
-            logger.debug("Using async tracker to track LM")
+            # logger.debug("Using async tracker to track LM")
             synth_tracker_async.track_lm(messages, model_name, finetune)
         elif getattr(synth_tracker_sync._local, "initialized", False):
-            logger.debug("Using sync tracker to track LM")
+            # logger.debug("Using sync tracker to track LM")
             synth_tracker_sync.track_lm(messages, model_name, finetune)
         else:
             # raise RuntimeError("Trace not initialized in track_lm.")
@@ -302,10 +302,10 @@ class SynthTracker:
             ```
         """
         if cls.is_called_by_async() and trace_initialized_var.get():
-            logger.debug("Using async tracker to track state")
+            # logger.debug("Using async tracker to track state")
             synth_tracker_async.track_state(variable_name, variable_value, origin, annotation)
         elif getattr(synth_tracker_sync._local, "initialized", False):
-            logger.debug("Using sync tracker to track state")
+            # logger.debug("Using sync tracker to track state")
             synth_tracker_sync.track_state(variable_name, variable_value, origin, annotation)
         else:
             #raise RuntimeError("Trace not initialized in track_state.")
@@ -319,13 +319,13 @@ class SynthTracker:
         traced_inputs, traced_outputs = [], []
 
         if async_sync in ["async", ""]:
-            #logger.debug("Getting traced data from async tracker")
+            # logger.debug("Getting traced data from async tracker")
             traced_inputs_async, traced_outputs_async = synth_tracker_async.get_traced_data()
             traced_inputs.extend(traced_inputs_async)
             traced_outputs.extend(traced_outputs_async)
 
         if async_sync in ["sync", ""]:
-            #logger.debug("Getting traced data from sync tracker")
+            # logger.debug("Getting traced data from sync tracker")
             traced_inputs_sync, traced_outputs_sync = synth_tracker_sync.get_traced_data()
             traced_inputs.extend(traced_inputs_sync)
             traced_outputs.extend(traced_outputs_sync)

@@ -93,9 +93,12 @@ def send_system_traces_s3(
     base_url: str,
     api_key: str,
     system_id: str,
+    system_name: str,
     verbose: bool = False,
 ):
-    upload_id, signed_url = get_upload_id(base_url, api_key, system_id, verbose)
+    upload_id, signed_url = get_upload_id(
+        base_url, api_key, system_id, system_name, verbose
+    )
     load_signed_url(signed_url, dataset, traces)
 
     token_url = f"{base_url}/v1/auth/token"
@@ -140,8 +143,11 @@ def send_system_traces_s3(
 
 
 def get_upload_id(
-    base_url: str, api_key: str, system_id, verbose: bool = False
+    base_url: str, api_key: str, system_id: str, system_name: str, verbose: bool = False
 ):
+    """
+    Modified client-side function to send both system_id and system_name.
+    """
     token_url = f"{base_url}/v1/auth/token"
     token_response = requests.get(
         token_url, headers={"customer_specific_api_key": api_key}
@@ -149,7 +155,11 @@ def get_upload_id(
     token_response.raise_for_status()
     access_token = token_response.json()["access_token"]
 
-    api_url = f"{base_url}/v1/uploads/get-upload-id-signed-url?system_id={system_id}"
+    # Include system_name in the query parameters
+    api_url = (
+        f"{base_url}/v1/uploads/get-upload-id-signed-url?"
+        f"system_id={system_id}&system_name={system_name}"
+    )
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
@@ -356,7 +366,10 @@ def upload_helper(
                 if hasattr(_local, "system_instance_id"):
                     try:
                         event_store.add_event(
-                            _local.system_instance_id, _local.system_id, event
+                            _local.system_name,
+                            _local.system_id,
+                            _local.system_instance_id,
+                            event,
                         )
                         if verbose:
                             print(f"Closed and stored active event: {event_type}")
@@ -375,7 +388,10 @@ def upload_helper(
                 if event.closed is None:
                     event.closed = current_time
                     event_store.add_event(
-                        trace.system_instance_id, trace.system_id, event
+                        trace.system_name,
+                        trace.system_id,
+                        trace.system_instance_id,
+                        event,
                     )
                     if verbose:
                         print(f"Closed existing unclosed event: {event.event_type}")
@@ -395,31 +411,20 @@ def upload_helper(
             print("Upload format validation successful")
 
         # Send to server
-        response, payload = send_system_traces_s3(
+        upload_id, signed_url = send_system_traces_s3(
             dataset=dataset,
             traces=traces,
             base_url=base_url,
             api_key=api_key,
             system_id=traces[0].system_id,
+            system_name=traces[0].system_name,
             verbose=verbose,
         )
-
-        if verbose:
-            print("Response status code:", response.status_code)
-            if response.status_code == 202:
-                print(f"Upload successful - sent {len(traces)} system traces.")
-                print(
-                    f"Dataset included {len(dataset.questions)} questions and {len(dataset.reward_signals)} reward signals."
-                )
-
-        if show_payload:
-            print("Payload sent to server: ")
-            pprint(payload)
 
         questions_json, reward_signals_json, traces_json = format_upload_output(
             dataset, traces
         )
-        return response, questions_json, reward_signals_json, traces_json
+        return upload_id, questions_json, reward_signals_json, traces_json
 
     except ValueError as e:
         if verbose:

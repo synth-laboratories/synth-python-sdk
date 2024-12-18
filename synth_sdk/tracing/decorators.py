@@ -98,14 +98,15 @@ def trace_system_sync(
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
-                            _local.system_instance_id,
+                            _local.system_name,
                             _local.system_id,
+                            _local.system_instance_id,
                         )
-                        logger.debug(
-                            f"Incremented partition to: {event.partition_index}"
-                        )
+                        # logger.debug(
+                        #     f"Incremented partition to: {event.partition_index}"
+                        # )
                     set_current_event(event, decorator_type="sync")
-                    logger.debug(f"Created and set new event: {event_type}")
+                    # logger.debug(f"Created and set new event: {event_type}")
 
                 # Automatically trace function inputs
                 bound_args = inspect.signature(func).bind(*args, **kwargs)
@@ -227,11 +228,8 @@ def trace_system_sync(
                     # Store the event
                     if hasattr(_local, "system_instance_id"):
                         event_store.add_event(
-                            _local.system_instance_id, _local.system_id, current_event
+                            _local.system_name, _local.system_id, _local.system_instance_id, current_event
                         )
-                        # logger.debug(
-                        #     f"Stored and closed event {event_type} for system {_local.system_instance_id}"
-                        # )
                     del _local.active_events[event_type]
 
                 return result
@@ -316,14 +314,16 @@ def trace_system_async(
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
-                            system_instance_id_var.get(), system_id_var.get()
+                            system_name_var.get(),
+                            system_id_var.get(),
+                            system_instance_id_var.get(), 
                         )
-                        logger.debug(
-                            f"Incremented partition to: {event.partition_index}"
-                        )
+                        # logger.debug(
+                        #     f"Incremented partition to: {event.partition_index}"
+                        # )
 
                     set_current_event(event, decorator_type="async")
-                    logger.debug(f"Created and set new event: {event_type}")
+                    # logger.debug(f"Created and set new event: {event_type}")
 
                 # Automatically trace function inputs
                 bound_args = inspect.signature(func).bind(*args, **kwargs)
@@ -446,13 +446,30 @@ def trace_system_async(
                     # Store the event
                     if system_instance_id_var.get():
                         event_store.add_event(
-                            system_instance_id_var.get(),
+                            system_name_var.get(),
                             system_id_var.get(),
+                            system_instance_id_var.get(),
                             current_event,
                         )
                     active_events = active_events_var.get()
                     del active_events[event_type]
                     active_events_var.set(active_events)
+
+                # Auto-close and store events created with manage_event="create"
+                if manage_event == "create" and event is not None and event.closed is None:
+                    event.closed = time.time()
+                    active_events_dict = active_events_var.get()
+                    if event_type in active_events_dict:
+                        # Store the event while context vars are still valid
+                        event_store.add_event(
+                            system_name_var.get(),
+                            system_id_var.get(),
+                            system_instance_id_var.get(),
+                            event,
+                        )
+                        # Remove from active events
+                        active_events_dict.pop(event_type, None)
+                        active_events_var.set(active_events_dict)
 
                 return result
             except Exception as e:
