@@ -93,7 +93,7 @@ def trace_system_sync(
                         opened=compute_began,
                         closed=None,
                         partition_index=0,
-                        agent_compute_steps=[],
+                        agent_compute_step=None,
                         environment_compute_steps=[],
                         system_name=(system_name_var.get() or None),
                         system_id=(system_id_var.get() or None),
@@ -187,7 +187,7 @@ def trace_system_sync(
                     outputs = compute_steps_by_origin[var_origin]["outputs"]
                     if inputs or outputs:
                         event_order = (
-                            len(event.agent_compute_steps)
+                            1
                             + len(event.environment_compute_steps)
                             + 1
                             if event
@@ -212,7 +212,7 @@ def trace_system_sync(
                         )
                         if event:
                             if var_origin == "agent":
-                                event.agent_compute_steps.append(compute_step)
+                                event.agent_compute_step = compute_step
                             else:
                                 event.environment_compute_steps.append(compute_step)
                         # logger.debug(
@@ -314,7 +314,7 @@ def trace_system_async(
                         opened=compute_began,
                         closed=None,
                         partition_index=0,
-                        agent_compute_steps=[],
+                        agent_compute_step=None,
                         environment_compute_steps=[],
                         system_name=(system_name_var.get() or None),
                         system_id=(system_id_var.get() or None),
@@ -411,7 +411,7 @@ def trace_system_async(
                     outputs = compute_steps_by_origin[var_origin]["outputs"]
                     if inputs or outputs:
                         event_order = (
-                            len(event.agent_compute_steps)
+                            1
                             + len(event.environment_compute_steps)
                             + 1
                             if event
@@ -436,7 +436,7 @@ def trace_system_async(
                         )
                         if event:
                             if var_origin == "agent":
-                                event.agent_compute_steps.append(compute_step)
+                                event.agent_compute_step = compute_step
                             else:
                                 event.environment_compute_steps.append(compute_step)
                         # logger.debug(
