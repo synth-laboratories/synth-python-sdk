@@ -4,7 +4,6 @@ import logging
 import os
 import ssl
 import time
-from pprint import pprint
 from typing import Any, Dict, List
 
 import requests
@@ -356,9 +355,30 @@ def upload_helper(
         "SYNTH_ENDPOINT_OVERRIDE", "https://agent-learning.onrender.com"
     )
 
-    # End all active events before uploading
-    from synth_sdk.tracing.decorators import _local
+    from synth_sdk.tracing.decorators import _local, active_events_var
+    from synth_sdk.tracing.trackers import synth_tracker_async, synth_tracker_sync
 
+    # First close any tracker events
+    if hasattr(synth_tracker_async, "active_events"):
+        for event_type, event in list(synth_tracker_async.active_events.items()):
+            if event and event.closed is None:
+                event.closed = time.time()
+                try:
+                    event_store.add_event(
+                        event.system_name,
+                        event.system_id,
+                        event.system_instance_id,
+                        event,
+                    )
+                    if verbose:
+                        print(f"Closed and stored tracker async event: {event_type}")
+                except Exception as e:
+                    logging.error(
+                        f"Failed to store tracker event {event_type}: {str(e)}"
+                    )
+        synth_tracker_async.active_events.clear()
+
+    # End all active events before uploading
     if hasattr(_local, "active_events"):
         for event_type, event in _local.active_events.items():
             if event and event.closed is None:
@@ -376,6 +396,26 @@ def upload_helper(
                     except Exception as e:
                         logging.error(f"Failed to store event {event_type}: {str(e)}")
         _local.active_events.clear()
+
+    # NEW: Close all open asynchronous events
+    active_events_async = active_events_var.get()
+    if active_events_async:
+        current_time = time.time()
+        for event_type, event in list(active_events_async.items()):
+            if event and event.closed is None:
+                event.closed = current_time
+                try:
+                    event_store.add_event(
+                        event.system_name,
+                        event.system_id,
+                        event.system_instance_id,
+                        event,
+                    )
+                    if verbose:
+                        print(f"Closed and stored async event: {event_type}")
+                except Exception as e:
+                    logging.error(f"Failed to store async event {event_type}: {str(e)}")
+        active_events_var.set({})
 
     # Also close any unclosed events in existing traces
     logged_traces = event_store.get_system_traces()
