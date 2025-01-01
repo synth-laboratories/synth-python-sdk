@@ -9,6 +9,7 @@ from synth_sdk.tracing.local import (  # Import context variables
     _local,
     active_events_var,
     system_id_var,
+    system_name_var,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,20 +152,18 @@ class EventStore:
                     if event.closed is None:
                         event.closed = time.time()
                         self.add_event(system_name, system_id, event.system_instance_id, event)
-                        # self.#logger.debug(f"Stored and closed event {event_type}")
                 _local.active_events.clear()
 
         else:
             # For asynchronous code
             active_events_async = active_events_var.get()
-            print("Active events async:", active_events_async.items())
-            if active_events_async:  # and system_instance_id_async:
+            if active_events_async:
                 for event_type, event in list(active_events_async.items()):
                     system_id = system_id_var.get()
+                    system_name = system_name_var.get()
                     if event.closed is None:
                         event.closed = time.time()
                         self.add_event(system_name, system_id, event.system_instance_id, event)
-                        # self.#logger.debug(f"Stored and closed event {event_type}")
                 active_events_var.set({})
 
     def get_system_traces_json(self) -> str:
