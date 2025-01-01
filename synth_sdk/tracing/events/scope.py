@@ -40,7 +40,7 @@ def event_scope(event_type: str):
         opened=time.time(),
         closed=None,
         partition_index=0,
-        agent_compute_steps=[],
+        agent_compute_step=None,
         environment_compute_steps=[],
     )
     set_current_event(event)
