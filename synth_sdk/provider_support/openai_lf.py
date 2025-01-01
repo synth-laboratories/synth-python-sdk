@@ -176,49 +176,63 @@ def _langfuse_wrapper(func):
     return _with_langfuse
 
 
-def _extract_chat_prompt(kwargs: any):
-    """Extracts the user input from prompts. Returns an array of messages or dict with messages and functions"""
+def _extract_chat_prompt(kwargs: dict):
+    """
+    Extracts the user input from prompts. Returns an array of messages or a dict with messages and functions.
+    """
+    logger.debug(
+        "Entering _extract_chat_prompt with kwargs keys: %s", list(kwargs.keys())
+    )
+
     prompt = {}
 
     if kwargs.get("functions") is not None:
         prompt.update({"functions": kwargs["functions"]})
+        logger.debug("Found 'functions': %s", kwargs["functions"])
 
     if kwargs.get("function_call") is not None:
         prompt.update({"function_call": kwargs["function_call"]})
+        logger.debug("Found 'function_call': %s", kwargs["function_call"])
 
     if kwargs.get("tools") is not None:
         prompt.update({"tools": kwargs["tools"]})
+        logger.debug("Found 'tools': %s", kwargs["tools"])
 
+    # existing logic to handle the case when prompt is not empty
     if prompt:
-        # uf user provided functions, we need to send these together with messages to langfuse
-        prompt.update(
-            {
-                "messages": _filter_image_data(kwargs.get("messages", [])),
-            }
+        messages = _filter_image_data(kwargs.get("messages", []))
+        prompt.update({"messages": messages})
+        logger.debug(
+            "Detected advanced usage (functions/tools). Prompt now has messages: %s",
+            messages,
         )
         return prompt
     else:
-        # vanilla case, only send messages in openai format to langfuse
-        return _filter_image_data(kwargs.get("messages", []))
+        # fallback: just return filtered messages
+        messages = _filter_image_data(kwargs.get("messages", []))
+        logger.debug("Returning vanilla messages: %s", messages)
+        return messages
 
 
-def _extract_chat_response(kwargs: any):
-    """Extracts the llm output from the response."""
+def _extract_chat_response(kwargs: dict):
+    """
+    Extracts the LLM output from the response.
+    """
+    logger.debug("Entering _extract_chat_response with keys: %s", list(kwargs.keys()))
     response = {
         "role": kwargs.get("role", None),
     }
 
     if kwargs.get("function_call") is not None:
         response.update({"function_call": kwargs["function_call"]})
+        logger.debug("Found 'function_call': %s", kwargs["function_call"])
 
     if kwargs.get("tool_calls") is not None:
         response.update({"tool_calls": kwargs["tool_calls"]})
+        logger.debug("Found 'tool_calls': %s", kwargs["tool_calls"])
 
-    response.update(
-        {
-            "content": kwargs.get("content", None),
-        }
-    )
+    response["content"] = kwargs.get("content", None)
+    logger.debug("Final extracted chat response: %s", response)
     return response
 
 
@@ -803,11 +817,14 @@ class LangfuseResponseGeneratorSync:
         pass
 
     def _finalize(self):
+        logger.debug("Entering _finalize() in LangfuseResponseGeneratorSync...")
         model, completion, usage = _extract_streamed_openai_response(
             self.resource, self.items
         )
+        logger.debug(
+            "Extracted model=%s, completion=%s, usage=%s", model, completion, usage
+        )
 
-        # Collect messages
         if self.resource.type == "completion":
             user_prompt = self.kwargs.get("prompt", "")
             messages = [
@@ -817,12 +834,22 @@ class LangfuseResponseGeneratorSync:
             message_input = MessageInputs(messages=messages)
         elif self.resource.type == "chat":
             messages = self.kwargs.get("messages", [])
-            messages.append({"role": "assistant", "content": completion["content"]})
+            logger.debug(
+                "Existing 'messages' from kwargs before appending: %s", messages
+            )
+            # If completion is a dict, ensure we extract 'content' safely
+            if isinstance(completion, dict) and "content" in completion:
+                messages.append({"role": "assistant", "content": completion["content"]})
             message_input = MessageInputs(messages=messages)
+            logger.debug("Final 'messages': %s", message_input.messages)
         else:
             message_input = MessageInputs(messages=[])
 
-        # Use track_lm
+        logger.debug(
+            "Calling track_lm with messages: %s, model: %s",
+            message_input.messages,
+            model,
+        )
         synth_tracker_sync.track_lm(
             messages=message_input.messages, model_name=model, finetune=False
         )
@@ -896,48 +923,42 @@ class LangfuseResponseGeneratorAsync:
         pass
 
     async def _finalize(self):
-        # logger.debug("Starting _finalize in LangfuseResponseGeneratorAsync")
+        logger.debug("Entering _finalize() in LangfuseResponseGeneratorAsync...")
         model, completion, usage = _extract_streamed_openai_response(
             self.resource, self.items
         )
-        # logger.debug(f"Extracted response - model: {model}, completion type: {type(completion)}")
-        # logger.debug(f"Completion content: {completion}")
+        logger.debug(
+            "Extracted model=%s, completion=%s, usage=%s", model, completion, usage
+        )
 
-        # Collect messages
-        # logger.debug(f"Resource type: {self.resource.type}")
         if self.resource.type == "completion":
-            # logger.debug("Processing completion type response")
             user_prompt = self.kwargs.get("prompt", "")
-            # logger.debug(f"User prompt: {user_prompt}")
             messages = [
                 {"role": "user", "content": user_prompt},
                 {"role": "assistant", "content": completion},
             ]
             message_input = MessageInputs(messages=messages)
-            # logger.debug(f"Created message input for completion: {messages}")
         elif self.resource.type == "chat":
-            # logger.debug("Processing chat type response")
             messages = self.kwargs.get("messages", [])
-            # logger.debug(f"Original messages: {messages}")
-
+            logger.debug(
+                "Existing 'messages' from kwargs before appending: %s", messages
+            )
+            # If completion is a dict, ensure we extract 'content' safely
             if isinstance(completion, dict) and "content" in completion:
                 messages.append({"role": "assistant", "content": completion["content"]})
-                # logger.debug(f"Appended assistant message: {completion['content']}")
-            else:
-                logger.warning(f"Unexpected completion format: {completion}")
-
             message_input = MessageInputs(messages=messages)
-            # logger.debug(f"Final message input for chat: {message_input.messages}")
+            logger.debug("Final 'messages': %s", message_input.messages)
         else:
-            logger.error(f"Unknown resource type: {self.resource.type}")
             message_input = MessageInputs(messages=[])
-        # Use track_lm
-        # logger.debug(f"About to track_lm with model: {model}")
-        # logger.debug(f"Messages to track: {message_input.messages}")
+
+        logger.debug(
+            "Calling track_lm (async) with messages: %s, model: %s",
+            message_input.messages,
+            model,
+        )
         synth_tracker_async.track_lm(
             messages=message_input.messages, model_name=model, finetune=False
         )
-        # logger.debug("Completed track_lm call")
 
         # Avoiding the trace-update if trace-id is provided by user.
         if not self.is_nested_trace:

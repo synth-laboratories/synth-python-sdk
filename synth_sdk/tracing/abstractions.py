@@ -94,11 +94,13 @@ class EnvironmentComputeStep(ComputeStep):
 class Event:
     system_instance_id: str
     event_type: str
-    opened: Any  # timestamp
-    closed: Any  # timestamp
+    opened: float
+    closed: Optional[float]
     partition_index: int
-    agent_compute_steps: List[AgentComputeStep]
-    environment_compute_steps: List[EnvironmentComputeStep]
+    agent_compute_steps: List["AgentComputeStep"]
+    environment_compute_steps: List["EnvironmentComputeStep"]
+    system_name: Optional[str] = None
+    system_id: Optional[str] = None
 
     def to_dict(self):
         return {

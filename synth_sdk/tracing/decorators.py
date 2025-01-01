@@ -95,6 +95,8 @@ def trace_system_sync(
                         partition_index=0,
                         agent_compute_steps=[],
                         environment_compute_steps=[],
+                        system_name=(system_name_var.get() or None),
+                        system_id=(system_id_var.get() or None),
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
@@ -228,7 +230,10 @@ def trace_system_sync(
                     # Store the event
                     if hasattr(_local, "system_instance_id"):
                         event_store.add_event(
-                            _local.system_name, _local.system_id, _local.system_instance_id, current_event
+                            _local.system_name,
+                            _local.system_id,
+                            _local.system_instance_id,
+                            current_event,
                         )
                     del _local.active_events[event_type]
 
@@ -311,12 +316,14 @@ def trace_system_async(
                         partition_index=0,
                         agent_compute_steps=[],
                         environment_compute_steps=[],
+                        system_name=(system_name_var.get() or None),
+                        system_id=(system_id_var.get() or None),
                     )
                     if increment_partition:
                         event.partition_index = event_store.increment_partition(
                             system_name_var.get(),
                             system_id_var.get(),
-                            system_instance_id_var.get(), 
+                            system_instance_id_var.get(),
                         )
                         logger.debug(
                             f"Incremented partition to: {event.partition_index}"
@@ -460,7 +467,17 @@ def trace_system_async(
                 logger.error(f"Exception in traced function '{func.__name__}': {e}")
                 raise
             finally:
-                # synth_tracker_async.finalize()
+                # Store any unclosed events before cleanup
+                if event and not event.closed:
+                    event.closed = time.time()
+                    event_store.add_event(
+                        system_name_var.get(),
+                        system_id_var.get(),
+                        system_instance_id_var.get(),
+                        event,
+                    )
+                    logger.debug(f"Stored unclosed event {event_type} in finally block")
+
                 # Reset context variables
                 system_instance_id_var.reset(system_instance_id_token)
                 system_name_var.reset(system_name_token)

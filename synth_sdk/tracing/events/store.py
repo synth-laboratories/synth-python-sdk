@@ -8,8 +8,6 @@ from synth_sdk.tracing.abstractions import Event, EventPartitionElement, SystemT
 from synth_sdk.tracing.local import (  # Import context variables
     _local,
     active_events_var,
-    system_id_var,
-    system_name_var,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,11 +20,11 @@ class EventStore:
         self.logger = logging.getLogger(__name__)
 
     def get_or_create_system_trace(
-        self, 
+        self,
         system_name: str,
-        system_id: str, 
+        system_id: str,
         system_instance_id: str,
-        _already_locked: bool = False
+        _already_locked: bool = False,
     ) -> SystemTrace:
         """Get or create a SystemTrace for the given system_instance_id."""
         logger = logging.getLogger(__name__)
@@ -54,7 +52,9 @@ class EventStore:
                 # logger.debug("Lock acquired in get_or_create_system_trace")
                 return _get_or_create()
 
-    def increment_partition(self, system_name: str, system_id: str, system_instance_id: str) -> int:
+    def increment_partition(
+        self, system_name: str, system_id: str, system_instance_id: str
+    ) -> int:
         """Increment the partition index for a system and create new partition element."""
         logger = logging.getLogger(__name__)
         # logger.debug(f"Starting increment_partition for system {system_instance_id}")
@@ -82,7 +82,9 @@ class EventStore:
 
             return system_trace.current_partition_index
 
-    def add_event(self, system_name: str, system_id: str, system_instance_id: str, event: Event):
+    def add_event(
+        self, system_name: str, system_id: str, system_instance_id: str, event: Event
+    ):
         """Add an event to the appropriate partition of the system trace."""
         # self.#logger.debug(f"Adding event type {event.event_type} to system {system_instance_id}")
         # self.#logger.debug(
@@ -143,27 +145,30 @@ class EventStore:
 
         # For synchronous code
         if hasattr(_local, "active_events"):
-            active_events = _local.active_events
-            system_instance_id = getattr(_local, "system_instance_id", None)
-            system_name = getattr(_local, "system_name", None)
-            system_id = getattr(_local, "system_id", None)
-            if active_events:  # and system_instance_id:
-                for event_type, event in list(active_events.items()):
-                    if event.closed is None:
-                        event.closed = time.time()
-                        self.add_event(system_name, system_id, event.system_instance_id, event)
-                _local.active_events.clear()
+            for _, event in list(_local.active_events.items()):
+                if event.closed is None:
+                    event.closed = time.time()
+                    self.add_event(
+                        event.system_name,
+                        event.system_id,
+                        event.system_instance_id,
+                        event,
+                    )
+            _local.active_events.clear()
 
         else:
             # For asynchronous code
             active_events_async = active_events_var.get()
             if active_events_async:
-                for event_type, event in list(active_events_async.items()):
-                    system_id = system_id_var.get()
-                    system_name = system_name_var.get()
+                for _, event in list(active_events_async.items()):
                     if event.closed is None:
                         event.closed = time.time()
-                        self.add_event(system_name, system_id, event.system_instance_id, event)
+                        self.add_event(
+                            event.system_name,
+                            event.system_id,
+                            event.system_instance_id,
+                            event,
+                        )
                 active_events_var.set({})
 
     def get_system_traces_json(self) -> str:

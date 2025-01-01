@@ -1,0 +1,12 @@
+# Language Model Configuration
+language_model:
+  name: "gpt-4o-mini-2024-07-18"  # Default model name
+  temperature: 0.0                 # Default temperature for deterministic outputs
+  max_retries: "Many"             # Retry policy for API calls
+  structured_output_mode: "stringified_json"  # Output format
+
+# Agent Configuration
+agent:
+  mode: "craftax_classic"         # Default mode, can be "craftax_classic" or "craftax_full"
+  max_history: 5                  # Number of past steps to include in context
+  max_agent_steps: 3      # Maximum number of steps before termination

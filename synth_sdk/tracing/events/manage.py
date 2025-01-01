@@ -27,8 +27,6 @@ def set_current_event(
     if event is None:
         raise ValueError("Event cannot be None when setting current event.")
 
-    # logger.debug(f"Setting current event of type {event.event_type}")
-
     # Check if we're in an async context
     try:
         import asyncio
@@ -64,23 +62,28 @@ def set_current_event(
                     )
                     try:
                         event_store.add_event(
-                            _local.system_name, _local.system_id, _local.system_instance_id, existing_event
+                            _local.system_name,
+                            _local.system_id,
+                            _local.system_instance_id,
+                            existing_event,
                         )
                         logger.debug("Successfully stored closed event")
                     except Exception as e:
                         logger.error(f"Failed to store closed event: {str(e)}")
                         raise
 
-        # Set the new event
-        _local.active_events[event.event_type] = event
-        # logger.debug("New event set as current in thread local")
+        # Set the new event with both keys
+        _local.active_events[event.event_type] = event  # Plain key
+        if is_async:
+            unique_key = f"{event.event_type}-{time.time()}"
+            _local.active_events[unique_key] = event  # Unique key for async
 
     else:
         from synth_sdk.tracing.local import (
             active_events_var,
-            system_name_var,
             system_id_var,
             system_instance_id_var,
+            system_name_var,
         )
 
         # Get current active events from context var
@@ -106,17 +109,24 @@ def set_current_event(
                     )
                     try:
                         event_store.add_event(
-                            system_name_var.get(), system_id_var.get(), system_instance_id, existing_event
+                            system_name_var.get(),
+                            system_id_var.get(),
+                            system_instance_id,
+                            existing_event,
                         )
                         logger.debug("Successfully stored closed event")
                     except Exception as e:
                         logger.error(f"Failed to store closed event: {str(e)}")
                         raise
 
-        # Set the new event
-        active_events[event.event_type] = event
+        # Set the new event with both keys
+        active_events[event.event_type] = event  # Plain key
+        unique_key = f"{event.event_type}-{time.time()}"
+        active_events[unique_key] = event  # Unique key for async
         active_events_var.set(active_events)
-        logger.debug("New event set as current in context vars")
+        logger.debug(
+            f"New event set as current in context vars with keys '{event.event_type}' and '{unique_key}'"
+        )
 
 
 def clear_current_event(event_type: str):
@@ -133,7 +143,10 @@ def end_event(event_type: str) -> Optional[Event]:
         # Store the event
         if hasattr(_local, "system_instance_id"):
             event_store.add_event(
-                _local.system_name, _local.system_id, _local.system_instance_id, current_event
+                _local.system_name,
+                _local.system_id,
+                _local.system_instance_id,
+                current_event,
             )
         clear_current_event(event_type)
     return current_event
