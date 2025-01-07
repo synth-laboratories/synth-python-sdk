@@ -97,7 +97,7 @@ class Event:
     opened: float
     closed: Optional[float]
     partition_index: int
-    agent_compute_steps: List["AgentComputeStep"]
+    agent_compute_step: AgentComputeStep
     environment_compute_steps: List["EnvironmentComputeStep"]
     system_name: Optional[str] = None
     system_id: Optional[str] = None
@@ -112,9 +112,7 @@ class Event:
             if isinstance(self.closed, datetime)
             else self.closed,
             "partition_index": self.partition_index,
-            "agent_compute_steps": [
-                step.to_dict() for step in self.agent_compute_steps
-            ],
+            "agent_compute_step": self.agent_compute_step.to_dict(),
             "environment_compute_steps": [
                 step.to_dict() for step in self.environment_compute_steps
             ],
