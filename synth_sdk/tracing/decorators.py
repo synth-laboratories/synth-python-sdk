@@ -65,7 +65,9 @@ def trace_system_sync(
             required_attrs = ["system_instance_id", "system_name"]
             for attr in required_attrs:
                 if not hasattr(self_instance, attr):
-                    raise ValueError(f"Instance missing required attribute '{attr}'")
+                    raise ValueError(
+                        f"Instance of class '{self_instance.__class__.__name__}' missing required attribute '{attr}'"
+                    )
 
             # Set thread-local variables
             _local.system_instance_id = self_instance.system_instance_id
@@ -187,11 +189,7 @@ def trace_system_sync(
                     outputs = compute_steps_by_origin[var_origin]["outputs"]
                     if inputs or outputs:
                         event_order = (
-                            1
-                            + len(event.environment_compute_steps)
-                            + 1
-                            if event
-                            else 1
+                            1 + len(event.environment_compute_steps) + 1 if event else 1
                         )
                         compute_step = (
                             AgentComputeStep(
@@ -283,7 +281,9 @@ def trace_system_async(
             required_attrs = ["system_instance_id", "system_name"]
             for attr in required_attrs:
                 if not hasattr(self_instance, attr):
-                    raise ValueError(f"Instance missing required attribute '{attr}'")
+                    raise ValueError(
+                        f"Instance of class '{self_instance.__class__.__name__}' missing required attribute '{attr}'"
+                    )
 
             # Set context variables
             system_instance_id_token = system_instance_id_var.set(
@@ -411,11 +411,7 @@ def trace_system_async(
                     outputs = compute_steps_by_origin[var_origin]["outputs"]
                     if inputs or outputs:
                         event_order = (
-                            1
-                            + len(event.environment_compute_steps)
-                            + 1
-                            if event
-                            else 1
+                            1 + len(event.environment_compute_steps) + 1 if event else 1
                         )
                         compute_step = (
                             AgentComputeStep(
