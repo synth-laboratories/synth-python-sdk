@@ -58,9 +58,7 @@ class SynthTrackerSync:
         annotation: Optional[str] = None,
     ):
         if not isinstance(variable_value, VALID_TYPES):
-            raise TypeError(
-                f"Variable {variable_name} must be one of {VALID_TYPES}, got {type(variable_value)}"
-            )
+            return
 
         if getattr(cls._local, "initialized", False):
             if isinstance(variable_value, BaseModel):
@@ -170,10 +168,9 @@ class SynthTrackerAsync:
         annotation: Optional[str] = None,
         io_type: Literal["input", "output"] = "output",
     ):
+        # Skip if value is not a trackable type instead of raising error
         if not isinstance(variable_value, VALID_TYPES):
-            raise TypeError(
-                f"Variable {variable_name} must be one of {VALID_TYPES}, got {type(variable_value)}"
-            )
+            return
 
         if trace_initialized_var.get():
             if isinstance(variable_value, BaseModel):
