@@ -201,16 +201,13 @@ class EventStore:
             "opened": event.opened,
             "closed": event.closed,
             "partition_index": event.partition_index,
-            "agent_compute_steps": [
-                {
-                    "event_order": step.event_order,
-                    "compute_began": step.compute_began,
-                    "compute_ended": step.compute_ended,
-                    "compute_input": step.compute_input,
-                    "compute_output": step.compute_output,
-                }
-                for step in event.agent_compute_steps
-            ],
+            "agent_compute_step": {
+                "event_order": event.agent_compute_step.event_order,
+                "compute_began": event.agent_compute_step.compute_began,
+                "compute_ended": event.agent_compute_step.compute_ended,
+                "compute_input": event.agent_compute_step.compute_input,
+                "compute_output": event.agent_compute_step.compute_output,
+            },
             "environment_compute_steps": [
                 {
                     "event_order": step.event_order,
