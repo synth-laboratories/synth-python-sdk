@@ -57,6 +57,7 @@ class SynthTrackerSync:
         origin: Literal["agent", "environment"],
         annotation: Optional[str] = None,
     ):
+        # Skip if value is not a trackable type instead of raising error
         if not isinstance(variable_value, VALID_TYPES):
             return
 
