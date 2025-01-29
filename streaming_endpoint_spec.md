@@ -52,7 +52,7 @@ Authorization: Bearer <api_key>
 ## New Streaming Endpoint
 
 ```
-POST /v1/traces/stream
+POST /v1/uploads/stream
 Content-Type: application/json
 Authorization: Bearer <api_key>
 
@@ -98,7 +98,7 @@ Authorization: Bearer <api_key>
 ### Request
 
 - **Method**: POST
-- **Path**: /v1/traces/stream
+- **Path**: /v1/uploads/stream
 - **Headers**:
   - Content-Type: application/json
   - Authorization: Bearer <api_key>

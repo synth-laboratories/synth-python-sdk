@@ -2,7 +2,6 @@ import logging
 import os
 from uuid import uuid4
 
-import pytest
 from dotenv import load_dotenv
 
 from synth_sdk.provider_support.openai_lf import AsyncOpenAI as SynthAsyncOpenAI
@@ -14,9 +13,6 @@ from synth_sdk.tracing.retry_queue import retry_queue
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-# Configure pytest-asyncio to use function scope for event loops
-pytestmark = pytest.mark.asyncio
 
 load_dotenv()
 
@@ -63,32 +59,35 @@ class AsyncOpenAIStreamingAgent:
         return response.choices[0].message.content
 
 
-@pytest.fixture(scope="function", autouse=True)
-async def setup_teardown():
-    """Setup and teardown for each test function with proper event loop scope."""
+async def setup():
+    """Setup function to prepare the test environment."""
     logger.info("=== SETUP STARTING ===")
 
     # Setup - runs before each test
     logger.info("Clearing event store and retry queue")
-    event_store._traces = []
-    event_store._current_trace = None
-    event_store._current_partition_index = 0
+    event_store.__init__()
     retry_queue.queue.clear()
 
     # Reset environment to default state
     logger.info("Setting up environment variables")
     os.environ["SYNTH_LOGGING_MODE"] = "instant"
-    os.environ["SYNTH_ENDPOINT_OVERRIDE"] = "https://agent-learning.onrender.com"
+    os.environ["SYNTH_ENDPOINT_OVERRIDE"] = "http://localhost:8000"
+    os.environ["SYNTH_API_KEY"] = (
+        "sk_live_d7aedcdd-e34b-4955-b356-8cd392b650b2"  # Add API key  # Add API key  # Add API key
+    )  # Add API key
 
     # Force new config to be read from env
     logger.info("Initializing client manager")
     config = get_tracing_config()
-    manager = ClientManager.initialize(config)
+    logger.info(f"Logging mode set to: {config.mode}")
+    logger.info(f"API Key present: {bool(config.api_key)}")  # Log API key presence
+    logger.info(f"Base URL: {config.base_url}")
+    ClientManager.initialize(config)
     logger.info("Setup complete")
 
-    yield
 
-    # Teardown - runs after each test
+async def teardown():
+    """Teardown function to clean up after tests."""
     logger.info("=== TEARDOWN STARTING ===")
 
     # Close the async client to ensure all tasks complete
@@ -99,46 +98,57 @@ async def setup_teardown():
 
     # Clear the stores
     logger.info("Clearing stores")
-    event_store._traces = []
-    event_store._current_trace = None
-    event_store._current_partition_index = 0
+    event_store.__init__()
     retry_queue.queue.clear()
 
     # Reset environment back to default state
     logger.info("Resetting environment variables")
     os.environ["SYNTH_LOGGING_MODE"] = "deferred"
-    os.environ["SYNTH_ENDPOINT_OVERRIDE"] = "https://agent-learning.onrender.com"
+    os.environ["SYNTH_ENDPOINT_OVERRIDE"] = "http://localhost:8000"
     logger.info("Teardown complete")
 
 
 async def test_immediate_logging():
     logger.info("=== TEST_IMMEDIATE_LOGGING STARTING ===")
 
-    # Create and use agent
-    agent = AsyncOpenAIStreamingAgent()
+    await setup()
 
-    # Verify event store is empty at start
-    initial_traces = event_store.get_system_traces()
-    logger.info(f"Initial event store state: {len(initial_traces)} traces")
-    assert len(initial_traces) == 0, "Event store should be empty at test start"
+    try:
+        # Create and use agent
+        agent = AsyncOpenAIStreamingAgent()
 
-    # Single calls to each method
-    logger.info("Making plan call")
-    plan = await agent.plan("What's 2+2?")
-    logger.info("Making execute call")
-    solution = await agent.execute(plan)
+        # Verify event store is empty at start
+        initial_traces = event_store.get_system_traces()
+        logger.info(f"Initial event store state: {len(initial_traces)} traces")
+        assert len(initial_traces) == 0, "Event store should be empty at test start"
 
-    # Check if events were recorded in event_store
-    traces = event_store.get_system_traces()
-    logger.info(f"Final event store state: {len(traces)} traces")
-    assert len(traces) == 1, f"Expected exactly 1 trace, but found {len(traces)}"
-    assert (
-        len(traces[0].partition[1].events) == 1
-    ), "Plan event missing from event store!"
-    assert (
-        len(traces[0].partition[2].events) == 1
-    ), "Execute event missing from event store!"
+        # Single calls to each method
+        logger.info("Making plan call")
+        plan = await agent.plan("What's 2+2?")
+        logger.info("Making execute call")
+        solution = await agent.execute(plan)
 
-    # Check retry queue is empty
-    logger.info(f"Retry queue state: {len(retry_queue.queue)} events")
-    assert len(retry_queue.queue) == 0, "Events found in retry queue!"
+        # Check if events were recorded in event_store
+        traces = event_store.get_system_traces()
+        logger.info(f"Final event store state: {len(traces)} traces")
+        assert len(traces) == 1, f"Expected exactly 1 trace, but found {len(traces)}"
+        assert (
+            len(traces[0].partition[1].events) == 1
+        ), "Plan event missing from event store!"
+        assert (
+            len(traces[0].partition[2].events) == 1
+        ), "Execute event missing from event store!"
+
+        # Check retry queue is empty
+        logger.info(f"Retry queue state: {len(retry_queue.queue)} events")
+        assert len(retry_queue.queue) == 0, "Events found in retry queue!"
+
+    finally:
+        await teardown()
+
+
+# Add a main block to run the test
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(test_immediate_logging())

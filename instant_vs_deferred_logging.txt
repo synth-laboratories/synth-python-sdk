@@ -7,7 +7,7 @@ PLAN
 
 
 ```python
-POST /v1/traces/stream
+POST /v1/uploads/stream
 - Accepts a single Event object (which includes its compute steps)
 - Returns 200 OK or error
 ```
@@ -41,7 +41,7 @@ class ImmediateLogClient:
             event: The Event object containing compute steps
             system_info: Dict containing system_name, system_id, and system_instance_id
         """
-        url = f"{self.config.base_url}/v1/traces/stream"
+        url = f"{self.config.base_url}/v1/uploads/stream"
         payload = {
             "event": event.to_dict(),
             "system_info": system_info
@@ -107,7 +107,7 @@ This approach:
 RETRIES and RESILIENCE
 
 Immediate Logging via a Dedicated Endpoint
-Provide an endpoint (e.g. POST /v1/traces/stream) that accepts a single Event object.
+Provide an endpoint (e.g. POST /v1/uploads/stream) that accepts a single Event object.
 Add a small HTTP client (ImmediateLogClient) that sends just-completed events to that endpoint.
 Same Data Structure
 Continue using the same event/compute-step data structures. After the function completes, we package the event object with its compute steps and system information, and send it via the ImmediateLogClient.
@@ -243,7 +243,7 @@ class ImmediateLogClient:
     
     def send_event(self, event: Event, system_info: Dict[str, str]) -> bool:
         """Sends a single event with retries and fallback"""
-        url = f"{self.config.base_url}/v1/traces/stream"
+        url = f"{self.config.base_url}/v1/uploads/stream"
         payload = {
             "event": event.to_dict(),
             "system_info": system_info
@@ -279,7 +279,7 @@ class AsyncImmediateLogClient:
     
     async def send_event(self, event: Event, system_info: Dict[str, str]) -> bool:
         """Sends a single event with retries and fallback (async version)"""
-        url = f"{self.config.base_url}/v1/traces/stream"
+        url = f"{self.config.base_url}/v1/uploads/stream"
         payload = {
             "event": event.to_dict(),
             "system_info": system_info

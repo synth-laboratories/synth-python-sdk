@@ -3,6 +3,8 @@ import logging
 import time
 from typing import Dict
 
+import httpx
+
 from synth_sdk.tracing.abstractions import Event
 from synth_sdk.tracing.client_manager import ClientManager
 from synth_sdk.tracing.config import TracingConfig
@@ -25,15 +27,18 @@ class ImmediateLogClient(BaseLogClient):
         )
 
         payload = self._prepare_payload(event, system_info)
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
         last_exception = None
 
         for attempt in range(self.config.max_retries):
             try:
                 response = self.client_manager.sync_client.post(
-                    f"{self.config.base_url}/v1/traces/stream",
+                    f"{self.config.base_url}/v1/uploads/stream",
                     json=payload,
+                    headers=headers,
                     timeout=self.config.timeout,
                 )
+                logger.info(f"Event upload response status: {response.status_code}")
                 response.raise_for_status()
                 response_data = response.json()
                 event.id = response_data.get("event_id")  # Store the event_id
@@ -70,28 +75,82 @@ class AsyncImmediateLogClient(BaseAsyncLogClient):
         """Send a single event with retries and fallback (async version)"""
         from synth_sdk.tracing.retry_queue import retry_queue
 
-        payload = self._prepare_payload(event, system_info)
-        last_exception = None
+        if not self.config.api_key:
+            logger.error("No API key provided")
+            return False
 
-        for attempt in range(self.config.max_retries + 1):
+        # First get JWT token
+        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             try:
-                async with self.client_manager.async_client as client:
-                    response = await client.post(
-                        f"{self.config.base_url}/v1/traces/stream",
-                        json=payload,
-                        timeout=self.config.timeout,
+                auth_response = await client.get(
+                    f"{self.config.base_url}/v1/auth/token",
+                    headers={"customer_specific_api_key": self.config.api_key.strip()},
+                )
+                auth_response.raise_for_status()
+                auth_data = auth_response.json()  # This is synchronous in httpx
+                logger.debug(f"Auth response data: {auth_data}")
+
+                token = auth_data.get("access_token")
+                if not token:
+                    logger.error(
+                        f"No access token received from auth endpoint. Response data: {auth_data}"
                     )
-                    response.raise_for_status()
-                    response_data = await response.json()
-                    event.id = response_data.get("event_id")  # Store the event_id
-                    return True
-
+                    return False
             except Exception as e:
-                last_exception = e
-                if attempt < self.config.max_retries:
-                    backoff = self.client_manager.calculate_backoff(attempt)
-                    await asyncio.sleep(backoff)
+                logger.error(f"Failed to get auth token: {e}")
+                return False
 
-        # Only reach here if all retries failed
-        retry_queue.add_failed_event(event, system_info)
-        return False
+            # Now send the event with the JWT token
+            payload = self._prepare_payload(event, system_info)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+
+            logger.debug(f"Request URL: {self.config.base_url}/v1/uploads/stream")
+            logger.debug("Using JWT token for authentication")
+            logger.debug(f"Headers: {headers}")
+            logger.debug(f"Payload size: {len(str(payload))} bytes")
+
+            async with httpx.AsyncClient(timeout=self.config.timeout) as client:
+                for attempt in range(self.config.max_retries + 1):
+                    try:
+                        response = await client.post(
+                            f"{self.config.base_url}/v1/uploads/stream",
+                            json=payload,
+                            headers=headers,
+                            timeout=self.config.timeout,
+                        )
+                        logger.info(
+                            f"Event upload response status: {response.status_code}"
+                        )
+
+                        if response.status_code >= 500:
+                            error_body = response.text
+                            logger.error(f"Server error. Response: {error_body}")
+                            response.raise_for_status()
+
+                        if response.status_code == 401:
+                            error_body = response.text
+                            logger.error(
+                                f"Authentication failed. Response: {error_body}"
+                            )
+                            response.raise_for_status()
+
+                        response_data = response.json()  # This is synchronous in httpx
+                        event.id = response_data.get("event_id")
+                        return True
+
+                    except Exception as e:
+                        last_exception = e
+                        logger.error(f"Upload attempt {attempt + 1} failed: {str(e)}")
+                        if attempt < self.config.max_retries:
+                            backoff = self.client_manager.calculate_backoff(attempt)
+                            await asyncio.sleep(backoff)
+
+                logger.error(
+                    f"All upload attempts failed. Last error: {last_exception}"
+                )
+                retry_queue.add_failed_event(event, system_info)
+                return False

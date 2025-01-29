@@ -1239,7 +1239,7 @@ index 8947ab0..4424538 100644
 +        for attempt in range(self.config.max_retries + 1):
              try:
 -                response = await self.client_manager.async_client.post(
--                    f"{self.config.base_url}/v1/traces/stream",
+-                    f"{self.config.base_url}/v1/uploads/stream",
 -                    json=payload,
 -                    timeout=self.config.timeout,
 -                )
