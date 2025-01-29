@@ -1,122 +1,131 @@
+from __future__ import annotations
+
+import asyncio
 import random
+from typing import ClassVar, Dict, Optional
 
 import httpx
-import requests
-from requests.adapters import HTTPAdapter
 
 from synth_sdk.tracing.config import TracingConfig
 
 
 class ClientManager:
-    """Singleton manager for HTTP clients used in logging"""
+    """Singleton manager for HTTP clients with both sync and async support"""
 
-    _instance = None
-    _sync_client = None
-    _async_client = None
-    _config = None
+    _instance: ClassVar[Optional[ClientManager]] = None
+    _lock = asyncio.Lock()
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
+    def __init__(self):
+        self._config: Optional[TracingConfig] = None
+        self._sync_client: Optional[httpx.Client] = None
+        self._async_client: Optional[httpx.AsyncClient] = None
+        self._credentials_cache: Dict[str, str] = {}
+
+    @classmethod
+    async def get_instance(cls) -> ClientManager:
+        """Get or create the singleton instance asynchronously"""
+        if not cls._instance:
+            async with cls._lock:
+                if not cls._instance:
+                    cls._instance = ClientManager()
         return cls._instance
 
     @classmethod
-    def initialize(cls, config: TracingConfig):
-        """Initialize or return the singleton instance with given config"""
+    def initialize(cls, config: TracingConfig) -> ClientManager:
+        """Initialize or return the singleton instance synchronously"""
         if cls._instance is None:
             cls._instance = cls()
-        cls._instance._config = config
+        cls._instance.configure(config)
         return cls._instance
 
-    @property
-    def sync_client(self) -> requests.Session:
-        """Get or create the synchronous HTTP client"""
-        if self._sync_client is None:
-            self._sync_client = requests.Session()
-            self._sync_client.headers["Authorization"] = (
-                f"Bearer {self._config.api_key}"
-            )
+    def configure(self, config: TracingConfig) -> None:
+        """Configure the client manager with new settings"""
+        self._config = config
+        self._credentials_cache = {
+            "api_key": config.api_key,
+            "api_secret": getattr(config, "api_secret", None),
+        }
+        self._close_clients()
 
-            # Configure the adapter with connection pooling
-            adapter = HTTPAdapter(
-                pool_connections=100,
-                pool_maxsize=100,
-                max_retries=0,  # We handle retries ourselves
-                pool_block=True,
+    def get_sync_client(self) -> httpx.Client:
+        """Get or create synchronized HTTP client with connection pooling"""
+        if not self._sync_client and self._config:
+            limits = httpx.Limits(
+                max_connections=self._config.max_connections,
+                max_keepalive_connections=self._config.max_connections,
             )
-            self._sync_client.mount("https://", adapter)
-            self._sync_client.mount("http://", adapter)
-
+            timeout = httpx.Timeout(timeout=self._config.timeout)
+            self._sync_client = httpx.Client(
+                base_url=self._config.base_url,
+                timeout=timeout,
+                limits=limits,
+                headers={"Authorization": f"Bearer {self._config.api_key}"},
+            )
         return self._sync_client
 
-    @property
-    def async_client(self) -> httpx.AsyncClient:
-        """Get or create the asynchronous HTTP client"""
-        if self._async_client is None:
+    async def get_async_client(self) -> httpx.AsyncClient:
+        """Get or create asynchronous HTTP client with connection pooling"""
+        if not self._async_client and self._config:
+            limits = httpx.Limits(
+                max_connections=self._config.max_connections,
+                max_keepalive_connections=self._config.max_connections,
+            )
+            timeout = httpx.Timeout(timeout=self._config.timeout)
             self._async_client = httpx.AsyncClient(
-                timeout=self._config.timeout,
+                base_url=self._config.base_url,
+                timeout=timeout,
+                limits=limits,
                 headers={"Authorization": f"Bearer {self._config.api_key}"},
-                limits=httpx.Limits(
-                    max_connections=100,
-                    max_keepalive_connections=20,
-                    keepalive_expiry=30.0,
-                ),
             )
         return self._async_client
 
-    def calculate_backoff(self, attempt: int) -> float:
-        """Calculate exponential backoff with jitter for retries
+    def calculate_backoff(self, retry_number: int) -> float:
+        """Calculate backoff time with exponential backoff and jitter"""
+        if not self._config:
+            raise RuntimeError("ClientManager not configured")
 
-        Args:
-            attempt: The current retry attempt number (0-based)
+        if retry_number <= 0:
+            return 0
 
-        Returns:
-            The number of seconds to wait before the next retry
-        """
-        # Calculate base delay with exponential backoff
-        base_delay = min(self._config.retry_backoff**attempt, 60)  # Cap at 60 seconds
+        if not getattr(self._config, "retry_exponential_backoff", True):
+            return self._config.retry_backoff
 
-        # Add random jitter (±10% of base_delay)
-        jitter = random.uniform(-0.1 * base_delay, 0.1 * base_delay)
+        # Calculate exponential backoff
+        delay = min(
+            self._config.retry_backoff * (2 ** (retry_number - 1)),
+            60.0,  # Cap at 60 seconds
+        )
 
-        return max(0.0, base_delay + jitter)  # Ensure non-negative delay
+        # Add jitter (±25% of delay)
+        jitter = delay * 0.25
+        delay = random.uniform(delay - jitter, delay + jitter)
 
-    async def aclose(self):
-        """Close the async client (call this during cleanup)"""
-        if self._async_client:
-            await self._async_client.aclose()
-            self._async_client = None
+        return max(0.0, delay)
 
-    def close(self):
-        """Close the sync client (call this during cleanup)"""
+    def close(self) -> None:
+        """Close the sync client"""
         if self._sync_client:
             self._sync_client.close()
             self._sync_client = None
 
+    async def aclose(self) -> None:
+        """Close the async client"""
+        if self._async_client:
+            await self._async_client.aclose()
+            self._async_client = None
+
+    def _close_clients(self) -> None:
+        """Close both sync and async clients"""
+        self.close()
+        if self._async_client:
+            asyncio.create_task(self.aclose())
+
     @property
-    def config(self) -> TracingConfig:
-        """Get the current configuration.
-
-        Returns:
-            TracingConfig: The current configuration
-
-        Raises:
-            RuntimeError: If the client manager is not configured
-        """
-        if not self._config:
-            raise RuntimeError("ClientManager not configured")
+    def config(self) -> Optional[TracingConfig]:
+        """Get the current configuration"""
         return self._config
 
     @config.setter
     def config(self, value: TracingConfig) -> None:
-        """Set the configuration and reset clients.
-
-        Args:
-            value: The new configuration to use
-        """
-        self._config = value
-        self._close_clients()
-
-    def _close_clients(self):
-        self.close()
-        self.aclose()
+        """Set the configuration and reset clients"""
+        self.configure(value)
