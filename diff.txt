@@ -1,0 +1,111 @@
+diff --git a/.gitignore b/.gitignore
+index d5de451..1968e68 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -164,6 +164,10 @@ cython_debug/
+ # uv.lock is annoying
+ uv.lock
+ 
++# Remove invalid pattern
++# dev/** */
+ 
+-dev/** */
+-dev
+\ No newline at end of file
++# Add correct pattern to ignore dev directory and its contents
++dev/
++devdatasets/competition_math/
++temp/
+diff --git a/pyproject.toml b/pyproject.toml
+index 5aeee94..5dafa0b 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -1,6 +1,6 @@
+ [project]
+ name = "synth-sdk"
+-version = "0.2.120
++version = "0.2.120"
+ description = ""
+ authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
+ license = {text = "MIT"}
+diff --git a/synth_sdk/tracing/config.py b/synth_sdk/tracing/config.py
+index d3353eb..786434e 100644
+--- a/synth_sdk/tracing/config.py
++++ b/synth_sdk/tracing/config.py
+@@ -1,13 +1,15 @@
++import json
++from enum import Enum
++from typing import Dict, List, Sequence
++
+ from opentelemetry import trace
+-from opentelemetry.sdk.trace import TracerProvider
++from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+ from opentelemetry.sdk.trace.export import (
+     SimpleSpanProcessor,
++    SpanExporter,
++    SpanExportResult,
+ )  # Changed from BatchSpanProcessor
+-from opentelemetry.sdk.trace import ReadableSpan
+-from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+-from typing import Sequence, Dict, List
+-import json
+-from pydantic import BaseModel
++from pydantic import BaseModel, Field
+ 
+ 
+ class InMemoryExporter(SpanExporter):
+@@ -73,3 +75,54 @@ def shutdown_tracer_provider():
+ 
+ # Update VALID_TYPES to include NoneType
+ VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))
++
++
++class LoggingMode(Enum):
++    """Logging mode for the tracing system"""
++
++    INSTANT = "instant"  # Send events immediately
++    DEFERRED = "deferred"  # Store events for later batch upload
++
++
++class TracingConfig(BaseModel):
++    """Configuration for the tracing system"""
++
++    # Basic settings
++    mode: LoggingMode
++    api_key: str
++    base_url: str = Field(
++        default="https://agent-learning.onrender.com",
++        description="Base URL for the logging endpoint",
++    )
++
++    # Retry settings
++    max_retries: int = Field(
++        default=3,
++        ge=0,
++        description="Maximum number of retry attempts for failed requests",
++    )
++    retry_backoff: float = Field(
++        default=1.5, gt=0, description="Exponential backoff multiplier between retries"
++    )
++
++    # Connection settings
++    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
++    max_connections: int = Field(
++        default=100, gt=0, description="Maximum number of concurrent connections"
++    )
++    keepalive_expiry: float = Field(
++        default=30.0, gt=0, description="Connection keepalive time in seconds"
++    )
++
++    # Batch settings (for future use)
++    batch_size: int = Field(
++        default=1,
++        ge=1,
++        description="Number of events to batch together (currently unused)",
++    )
++
++    class Config:
++        """Pydantic model configuration"""
++
++        validate_assignment = True
++        extra = "forbid"  # Prevent additional fields
