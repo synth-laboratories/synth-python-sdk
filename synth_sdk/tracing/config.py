@@ -1,13 +1,15 @@
+import json
+from enum import Enum
+from typing import Dict, List, Sequence
+
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import (
     SimpleSpanProcessor,
+    SpanExporter,
+    SpanExportResult,
 )  # Changed from BatchSpanProcessor
-from opentelemetry.sdk.trace import ReadableSpan
-from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
-from typing import Sequence, Dict, List
-import json
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class InMemoryExporter(SpanExporter):
@@ -71,5 +73,35 @@ def shutdown_tracer_provider():
     tracer_provider.shutdown()
 
 
-# Update VALID_TYPES to include NoneType
-VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))
+# Valid types for tracking
+VALID_TYPES = (str, dict, int, float, bool, list, type(None), BaseModel)
+
+
+class LoggingMode(Enum):
+    INSTANT = "instant"
+    DEFERRED = "deferred"
+
+
+class TracingConfig(BaseModel):
+    mode: LoggingMode = Field(default=LoggingMode.DEFERRED)
+    api_key: str
+    base_url: str = Field(default="https://agent-learning.onrender.com")
+    max_retries: int = Field(default=3)
+    retry_backoff: float = Field(default=1.5)  # exponential backoff multiplier
+    batch_size: int = Field(default=1)  # for future batching support
+    timeout: float = Field(default=5.0)  # seconds
+    sdk_version: str = Field(default="0.1.0")  # Added sdk_version field
+
+    # Connection settings
+    max_connections: int = Field(
+        default=100, gt=0, description="Maximum number of concurrent connections"
+    )
+    keepalive_expiry: float = Field(
+        default=30.0, gt=0, description="Connection keepalive time in seconds"
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+
+        validate_assignment = True
+        extra = "forbid"  # Prevent additional fields
