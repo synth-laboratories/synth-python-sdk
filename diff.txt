@@ -16,96 +16,1289 @@ index d5de451..1968e68 100644
 +dev/
 +devdatasets/competition_math/
 +temp/
-diff --git a/pyproject.toml b/pyproject.toml
-index 5aeee94..5dafa0b 100644
---- a/pyproject.toml
-+++ b/pyproject.toml
-@@ -1,6 +1,6 @@
- [project]
- name = "synth-sdk"
--version = "0.2.120
-+version = "0.2.120"
- description = ""
- authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
- license = {text = "MIT"}
+diff --git a/diff.txt b/diff.txt
+index 17e0c68..e69de29 100644
+--- a/diff.txt
++++ b/diff.txt
+@@ -1,111 +0,0 @@
+-diff --git a/.gitignore b/.gitignore
+-index d5de451..1968e68 100644
+---- a/.gitignore
+-+++ b/.gitignore
+-@@ -164,6 +164,10 @@ cython_debug/
+- # uv.lock is annoying
+- uv.lock
+- 
+-+# Remove invalid pattern
+-+# dev/** */
+- 
+--dev/** */
+--dev
+-\ No newline at end of file
+-+# Add correct pattern to ignore dev directory and its contents
+-+dev/
+-+devdatasets/competition_math/
+-+temp/
+-diff --git a/pyproject.toml b/pyproject.toml
+-index 5aeee94..5dafa0b 100644
+---- a/pyproject.toml
+-+++ b/pyproject.toml
+-@@ -1,6 +1,6 @@
+- [project]
+- name = "synth-sdk"
+--version = "0.2.120
+-+version = "0.2.120"
+- description = ""
+- authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
+- license = {text = "MIT"}
+-diff --git a/synth_sdk/tracing/config.py b/synth_sdk/tracing/config.py
+-index d3353eb..786434e 100644
+---- a/synth_sdk/tracing/config.py
+-+++ b/synth_sdk/tracing/config.py
+-@@ -1,13 +1,15 @@
+-+import json
+-+from enum import Enum
+-+from typing import Dict, List, Sequence
+-+
+- from opentelemetry import trace
+--from opentelemetry.sdk.trace import TracerProvider
+-+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+- from opentelemetry.sdk.trace.export import (
+-     SimpleSpanProcessor,
+-+    SpanExporter,
+-+    SpanExportResult,
+- )  # Changed from BatchSpanProcessor
+--from opentelemetry.sdk.trace import ReadableSpan
+--from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+--from typing import Sequence, Dict, List
+--import json
+--from pydantic import BaseModel
+-+from pydantic import BaseModel, Field
+- 
+- 
+- class InMemoryExporter(SpanExporter):
+-@@ -73,3 +75,54 @@ def shutdown_tracer_provider():
+- 
+- # Update VALID_TYPES to include NoneType
+- VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))
+-+
+-+
+-+class LoggingMode(Enum):
+-+    """Logging mode for the tracing system"""
+-+
+-+    INSTANT = "instant"  # Send events immediately
+-+    DEFERRED = "deferred"  # Store events for later batch upload
+-+
+-+
+-+class TracingConfig(BaseModel):
+-+    """Configuration for the tracing system"""
+-+
+-+    # Basic settings
+-+    mode: LoggingMode
+-+    api_key: str
+-+    base_url: str = Field(
+-+        default="https://agent-learning.onrender.com",
+-+        description="Base URL for the logging endpoint",
+-+    )
+-+
+-+    # Retry settings
+-+    max_retries: int = Field(
+-+        default=3,
+-+        ge=0,
+-+        description="Maximum number of retry attempts for failed requests",
+-+    )
+-+    retry_backoff: float = Field(
+-+        default=1.5, gt=0, description="Exponential backoff multiplier between retries"
+-+    )
+-+
+-+    # Connection settings
+-+    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
+-+    max_connections: int = Field(
+-+        default=100, gt=0, description="Maximum number of concurrent connections"
+-+    )
+-+    keepalive_expiry: float = Field(
+-+        default=30.0, gt=0, description="Connection keepalive time in seconds"
+-+    )
+-+
+-+    # Batch settings (for future use)
+-+    batch_size: int = Field(
+-+        default=1,
+-+        ge=1,
+-+        description="Number of events to batch together (currently unused)",
+-+    )
+-+
+-+    class Config:
+-+        """Pydantic model configuration"""
+-+
+-+        validate_assignment = True
+-+        extra = "forbid"  # Prevent additional fields
+diff --git a/instant_vs_deferred_logging.txt b/instant_vs_deferred_logging.txt
+index ed6712f..f318646 100644
+--- a/instant_vs_deferred_logging.txt
++++ b/instant_vs_deferred_logging.txt
+@@ -417,10 +417,8 @@ CONCRETE STEP BY STEP
+ - Handle nested decorators
+ 
+ ## Step 8: Error Handling & Resilience
+-- Add exponential backoff
+-- Implement proper retries
+-- Add circuit breaker
+-- Add error logging
++- Add logic where if a streaming endpoint hit fails, we save it in memory and then next time try to send both
++- reasonable (3s) retries for sending everything at the end of the run (batched upload)
+ 
+ ## Step 9: Metrics & Monitoring
+ - Add success/failure counters
+diff --git a/synth_sdk/tracing/base_client.py b/synth_sdk/tracing/base_client.py
+index 5fa3d28..b630fb0 100644
+--- a/synth_sdk/tracing/base_client.py
++++ b/synth_sdk/tracing/base_client.py
+@@ -28,6 +28,8 @@ class BaseLogClient(ABC):
+         self.config = config
+         self._consecutive_failures = 0
+         self._last_failure_time = 0
++        self._circuit_open = False
++        self._circuit_open_time = 0
+ 
+     def _should_retry(self, attempt: int, status_code: Optional[int] = None) -> bool:
+         """Determine if a retry should be attempted based on configuration and status"""
+diff --git a/synth_sdk/tracing/client_manager.py b/synth_sdk/tracing/client_manager.py
+index 22cca36..6380a25 100644
+--- a/synth_sdk/tracing/client_manager.py
++++ b/synth_sdk/tracing/client_manager.py
+@@ -92,3 +92,31 @@ class ClientManager:
+         if self._sync_client:
+             self._sync_client.close()
+             self._sync_client = None
++
++    @property
++    def config(self) -> TracingConfig:
++        """Get the current configuration.
++
++        Returns:
++            TracingConfig: The current configuration
++
++        Raises:
++            RuntimeError: If the client manager is not configured
++        """
++        if not self._config:
++            raise RuntimeError("ClientManager not configured")
++        return self._config
++
++    @config.setter
++    def config(self, value: TracingConfig) -> None:
++        """Set the configuration and reset clients.
++
++        Args:
++            value: The new configuration to use
++        """
++        self._config = value
++        self._close_clients()
++
++    def _close_clients(self):
++        self.close()
++        self.aclose()
 diff --git a/synth_sdk/tracing/config.py b/synth_sdk/tracing/config.py
-index d3353eb..786434e 100644
+index 786434e..dcbf5a2 100644
 --- a/synth_sdk/tracing/config.py
 +++ b/synth_sdk/tracing/config.py
-@@ -1,13 +1,15 @@
-+import json
-+from enum import Enum
-+from typing import Dict, List, Sequence
-+
- from opentelemetry import trace
--from opentelemetry.sdk.trace import TracerProvider
-+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
- from opentelemetry.sdk.trace.export import (
-     SimpleSpanProcessor,
-+    SpanExporter,
-+    SpanExportResult,
- )  # Changed from BatchSpanProcessor
--from opentelemetry.sdk.trace import ReadableSpan
--from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
--from typing import Sequence, Dict, List
--import json
--from pydantic import BaseModel
-+from pydantic import BaseModel, Field
+@@ -73,40 +73,26 @@ def shutdown_tracer_provider():
+     tracer_provider.shutdown()
  
  
- class InMemoryExporter(SpanExporter):
-@@ -73,3 +75,54 @@ def shutdown_tracer_provider():
+-# Update VALID_TYPES to include NoneType
+-VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))
++# Valid types for tracking
++VALID_TYPES = (str, dict, int, float, bool, list, type(None), BaseModel)
  
- # Update VALID_TYPES to include NoneType
- VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))
+ 
+ class LoggingMode(Enum):
+-    """Logging mode for the tracing system"""
+-
+-    INSTANT = "instant"  # Send events immediately
+-    DEFERRED = "deferred"  # Store events for later batch upload
++    INSTANT = "instant"
++    DEFERRED = "deferred"
+ 
+ 
+ class TracingConfig(BaseModel):
+-    """Configuration for the tracing system"""
+-
+-    # Basic settings
+-    mode: LoggingMode
++    mode: LoggingMode = Field(default=LoggingMode.DEFERRED)
+     api_key: str
+-    base_url: str = Field(
+-        default="https://agent-learning.onrender.com",
+-        description="Base URL for the logging endpoint",
+-    )
+-
+-    # Retry settings
+-    max_retries: int = Field(
+-        default=3,
+-        ge=0,
+-        description="Maximum number of retry attempts for failed requests",
+-    )
+-    retry_backoff: float = Field(
+-        default=1.5, gt=0, description="Exponential backoff multiplier between retries"
+-    )
++    base_url: str = Field(default="https://agent-learning.onrender.com")
++    max_retries: int = Field(default=3)
++    retry_backoff: float = Field(default=1.5)  # exponential backoff multiplier
++    batch_size: int = Field(default=1)  # for future batching support
++    timeout: float = Field(default=5.0)  # seconds
++    sdk_version: str = Field(default="0.1.0")  # Added sdk_version field
+ 
+     # Connection settings
+-    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
+     max_connections: int = Field(
+         default=100, gt=0, description="Maximum number of concurrent connections"
+     )
+@@ -114,13 +100,6 @@ class TracingConfig(BaseModel):
+         default=30.0, gt=0, description="Connection keepalive time in seconds"
+     )
+ 
+-    # Batch settings (for future use)
+-    batch_size: int = Field(
+-        default=1,
+-        ge=1,
+-        description="Number of events to batch together (currently unused)",
+-    )
+-
+     class Config:
+         """Pydantic model configuration"""
+ 
+diff --git a/synth_sdk/tracing/decorators.py b/synth_sdk/tracing/decorators.py
+index 198b3a6..3a8bb80 100644
+--- a/synth_sdk/tracing/decorators.py
++++ b/synth_sdk/tracing/decorators.py
+@@ -1,6 +1,7 @@
+ # synth_sdk/tracing/decorators.py
+ import inspect
+ import logging
++import os
+ import time
+ from functools import wraps
+ from typing import Any, Callable, Dict, List, Literal
+@@ -14,16 +15,20 @@ from synth_sdk.tracing.abstractions import (
+     MessageInputs,
+     MessageOutputs,
+ )
++from synth_sdk.tracing.config import LoggingMode, TracingConfig
++from synth_sdk.tracing.context import get_current_context, trace_context
+ from synth_sdk.tracing.events.manage import set_current_event
+ from synth_sdk.tracing.events.store import event_store
++from synth_sdk.tracing.immediate_client import (
++    AsyncImmediateLogClient,
++    ImmediateLogClient,
++)
+ from synth_sdk.tracing.local import (
+     _local,
+     active_events_var,
+     logger,
+-    system_id_var,
+-    system_instance_id_var,
+-    system_name_var,
+ )
++from synth_sdk.tracing.retry_queue import initialize_retry_queue, retry_queue
+ from synth_sdk.tracing.trackers import (
+     synth_tracker_async,
+     synth_tracker_sync,
+@@ -33,6 +38,64 @@ from synth_sdk.tracing.utils import get_system_id
+ logger = logging.getLogger(__name__)
+ 
+ 
++def clear_current_event(event_type: str) -> None:
++    """Clear the current event from the appropriate storage based on context.
++
++    Args:
++        event_type: The type of event to clear
++    """
++    try:
++        # Check if we're in an async context
++        import asyncio
++
++        asyncio.get_running_loop()
++        # We're in async context
++        active_events = active_events_var.get()
++        if event_type in active_events:
++            del active_events[event_type]
++            active_events_var.set(active_events)
++    except RuntimeError:
++        # We're in sync context
++        if hasattr(_local, "active_events") and event_type in _local.active_events:
++            del _local.active_events[event_type]
 +
 +
-+class LoggingMode(Enum):
-+    """Logging mode for the tracing system"""
-+
-+    INSTANT = "instant"  # Send events immediately
-+    DEFERRED = "deferred"  # Store events for later batch upload
-+
-+
-+class TracingConfig(BaseModel):
-+    """Configuration for the tracing system"""
-+
-+    # Basic settings
-+    mode: LoggingMode
-+    api_key: str
-+    base_url: str = Field(
-+        default="https://agent-learning.onrender.com",
-+        description="Base URL for the logging endpoint",
++# Cache the config to avoid repeated env lookups
++def get_tracing_config() -> TracingConfig:
++    config = TracingConfig(
++        mode=LoggingMode.INSTANT
++        if os.getenv("SYNTH_LOGGING_MODE") == "instant"
++        else LoggingMode.DEFERRED,
++        api_key=os.getenv("SYNTH_API_KEY", ""),
++        base_url=os.getenv(
++            "SYNTH_ENDPOINT_OVERRIDE", "https://agent-learning.onrender.com"
++        ),
 +    )
++    # Initialize retry queue with config if needed
++    initialize_retry_queue(config)
++    return config
 +
-+    # Retry settings
-+    max_retries: int = Field(
-+        default=3,
-+        ge=0,
-+        description="Maximum number of retry attempts for failed requests",
-+    )
-+    retry_backoff: float = Field(
-+        default=1.5, gt=0, description="Exponential backoff multiplier between retries"
-+    )
 +
-+    # Connection settings
-+    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
-+    max_connections: int = Field(
-+        default=100, gt=0, description="Maximum number of concurrent connections"
-+    )
-+    keepalive_expiry: float = Field(
-+        default=30.0, gt=0, description="Connection keepalive time in seconds"
-+    )
++def process_retry_queue_sync() -> None:
++    """Process the retry queue synchronously."""
++    try:
++        success, failure = retry_queue.process_sync()
++        if success or failure:
++            logger.info(f"Processed retry queue: {success} succeeded, {failure} failed")
++    except Exception as e:
++        logger.error(f"Error processing retry queue: {e}")
 +
-+    # Batch settings (for future use)
-+    batch_size: int = Field(
-+        default=1,
-+        ge=1,
-+        description="Number of events to batch together (currently unused)",
++
++async def process_retry_queue_async() -> None:
++    """Process the retry queue asynchronously."""
++    try:
++        success, failure = await retry_queue.process_async()
++        if success or failure:
++            logger.info(f"Processed retry queue: {success} succeeded, {failure} failed")
++    except Exception as e:
++        logger.error(f"Error processing retry queue: {e}")
++
++
+ # # This decorator is used to trace synchronous functions
+ def trace_system_sync(
+     origin: Literal["agent", "environment"],
+@@ -69,181 +132,189 @@ def trace_system_sync(
+                         f"Instance of class '{self_instance.__class__.__name__}' missing required attribute '{attr}'"
+                     )
+ 
+-            # Set thread-local variables
+-            _local.system_instance_id = self_instance.system_instance_id
+-            _local.system_name = self_instance.system_name
+-            _local.system_id = get_system_id(
+-                self_instance.system_name
+-            )  # self_instance.system_id
+-
+-            # Initialize Trace
+-            synth_tracker_sync.initialize()
+-
+-            # Initialize active_events if not present
+-            if not hasattr(_local, "active_events"):
+-                _local.active_events = {}
+-                # logger.debug("Initialized active_events in thread local storage")
+-
+-            event = None
+-            compute_began = time.time()
+-            try:
+-                if manage_event == "create":
+-                    # logger.debug("Creating new event")
+-                    event = Event(
+-                        system_instance_id=_local.system_instance_id,
+-                        event_type=event_type,
+-                        opened=compute_began,
+-                        closed=None,
+-                        partition_index=0,
+-                        agent_compute_step=None,
+-                        environment_compute_steps=[],
+-                        system_name=(system_name_var.get() or None),
+-                        system_id=(system_id_var.get() or None),
+-                    )
+-                    if increment_partition:
+-                        event.partition_index = event_store.increment_partition(
+-                            _local.system_name,
+-                            _local.system_id,
+-                            _local.system_instance_id,
++            # Use context manager for setup/cleanup
++            with trace_context(
++                system_name=self_instance.system_name,
++                system_id=get_system_id(self_instance.system_name),
++                system_instance_id=self_instance.system_instance_id,
++            ):
++                # Initialize Trace
++                synth_tracker_sync.initialize()
++
++                event = None
++                compute_began = time.time()
++                try:
++                    if manage_event == "create":
++                        # Create new event
++                        context = get_current_context()
++                        event = Event(
++                            system_instance_id=context["system_instance_id"],
++                            event_type=event_type,
++                            opened=compute_began,
++                            closed=None,
++                            partition_index=0,
++                            agent_compute_step=None,
++                            environment_compute_steps=[],
++                            system_name=context["system_name"],
++                            system_id=context["system_id"],
+                         )
+-                        logger.debug(
+-                            f"Incremented partition to: {event.partition_index}"
++                        if increment_partition:
++                            event.partition_index = event_store.increment_partition(
++                                context["system_name"],
++                                context["system_id"],
++                                context["system_instance_id"],
++                            )
++                            logger.debug(
++                                f"Incremented partition to: {event.partition_index}"
++                            )
++                        set_current_event(event, decorator_type="sync")
++                        logger.debug(f"Created and set new event: {event_type}")
++
++                    # Automatically trace function inputs
++                    bound_args = inspect.signature(func).bind(*args, **kwargs)
++                    bound_args.apply_defaults()
++                    for param, value in bound_args.arguments.items():
++                        if param == "self":
++                            continue
++                        synth_tracker_sync.track_state(
++                            variable_name=param, variable_value=value, origin=origin
+                         )
+-                    set_current_event(event, decorator_type="sync")
+-                    logger.debug(f"Created and set new event: {event_type}")
+-
+-                # Automatically trace function inputs
+-                bound_args = inspect.signature(func).bind(*args, **kwargs)
+-                bound_args.apply_defaults()
+-                for param, value in bound_args.arguments.items():
+-                    if param == "self":
+-                        continue
+-                    synth_tracker_sync.track_state(
+-                        variable_name=param, variable_value=value, origin=origin
+-                    )
+ 
+-                # Execute the function
+-                result = func(*args, **kwargs)
+-
+-                # Automatically trace function output
+-                track_result(result, synth_tracker_sync, origin)
+-
+-                # Collect traced inputs and outputs
+-                traced_inputs, traced_outputs = synth_tracker_sync.get_traced_data()
+-
+-                compute_steps_by_origin: Dict[
+-                    Literal["agent", "environment"], Dict[str, List[Any]]
+-                ] = {
+-                    "agent": {"inputs": [], "outputs": []},
+-                    "environment": {"inputs": [], "outputs": []},
+-                }
+-
+-                # Organize traced data by origin
+-                for item in traced_inputs:
+-                    var_origin = item["origin"]
+-                    if "variable_value" in item and "variable_name" in item:
+-                        # Standard variable input
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            ArbitraryInputs(
+-                                inputs={item["variable_name"]: item["variable_value"]}
++                    # Execute the function
++                    result = func(*args, **kwargs)
++
++                    # Automatically trace function output
++                    track_result(result, synth_tracker_sync, origin)
++
++                    # Collect traced inputs and outputs
++                    traced_inputs, traced_outputs = synth_tracker_sync.get_traced_data()
++
++                    compute_steps_by_origin: Dict[
++                        Literal["agent", "environment"], Dict[str, List[Any]]
++                    ] = {
++                        "agent": {"inputs": [], "outputs": []},
++                        "environment": {"inputs": [], "outputs": []},
++                    }
++
++                    # Organize traced data by origin
++                    for item in traced_inputs:
++                        var_origin = item["origin"]
++                        if "variable_value" in item and "variable_name" in item:
++                            # Standard variable input
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                ArbitraryInputs(
++                                    inputs={
++                                        item["variable_name"]: item["variable_value"]
++                                    }
++                                )
+                             )
+-                        )
+-                    elif "messages" in item:
+-                        # Message input from track_lm
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            MessageInputs(messages=item["messages"])
+-                        )
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            ArbitraryInputs(inputs={"model_name": item["model_name"]})
+-                        )
+-                        finetune = item["finetune"] or finetune_step
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            ArbitraryInputs(inputs={"finetune": finetune})
+-                        )
+-                    else:
+-                        logger.warning(f"Unhandled traced input item: {item}")
+-
+-                for item in traced_outputs:
+-                    var_origin = item["origin"]
+-                    if "variable_value" in item and "variable_name" in item:
+-                        # Standard variable output
+-                        compute_steps_by_origin[var_origin]["outputs"].append(
+-                            ArbitraryOutputs(
+-                                outputs={item["variable_name"]: item["variable_value"]}
++                        elif "messages" in item:
++                            # Message input from track_lm
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                MessageInputs(messages=item["messages"])
+                             )
+-                        )
+-                    elif "messages" in item:
+-                        # Message output from track_lm
+-                        compute_steps_by_origin[var_origin]["outputs"].append(
+-                            MessageOutputs(messages=item["messages"])
+-                        )
+-                    else:
+-                        logger.warning(f"Unhandled traced output item: {item}")
+-
+-                # Capture compute end time
+-                compute_ended = time.time()
+-
+-                # Create compute steps grouped by origin
+-                for var_origin in ["agent", "environment"]:
+-                    inputs = compute_steps_by_origin[var_origin]["inputs"]
+-                    outputs = compute_steps_by_origin[var_origin]["outputs"]
+-                    if inputs or outputs:
+-                        event_order = (
+-                            1 + len(event.environment_compute_steps) + 1 if event else 1
+-                        )
+-                        compute_step = (
+-                            AgentComputeStep(
+-                                event_order=event_order,
+-                                compute_began=compute_began,
+-                                compute_ended=compute_ended,
+-                                compute_input=inputs,
+-                                compute_output=outputs,
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                ArbitraryInputs(
++                                    inputs={"model_name": item["model_name"]}
++                                )
+                             )
+-                            if var_origin == "agent"
+-                            else EnvironmentComputeStep(
+-                                event_order=event_order,
+-                                compute_began=compute_began,
+-                                compute_ended=compute_ended,
+-                                compute_input=inputs,
+-                                compute_output=outputs,
++                            finetune = item["finetune"] or finetune_step
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                ArbitraryInputs(inputs={"finetune": finetune})
+                             )
+-                        )
+-                        if event:
+-                            if var_origin == "agent":
+-                                event.agent_compute_step = compute_step
+-                            else:
+-                                event.environment_compute_steps.append(compute_step)
+-                        # logger.debug(
+-                        #     f"Added compute step for {var_origin}: {compute_step.to_dict()}"
+-                        # )
+-
+-                # Optionally log the function result
+-                if log_result:
+-                    logger.info(f"Function result: {result}")
+-
+-                # Handle event management after function execution
+-                if manage_event == "end" and event_type in _local.active_events:
+-                    current_event = _local.active_events[event_type]
+-                    current_event.closed = compute_ended
+-                    # Store the event
+-                    if hasattr(_local, "system_instance_id"):
+-                        event_store.add_event(
+-                            _local.system_name,
+-                            _local.system_id,
+-                            _local.system_instance_id,
+-                            current_event,
+-                        )
+-                    del _local.active_events[event_type]
++                        else:
++                            logger.warning(f"Unhandled traced input item: {item}")
++
++                    for item in traced_outputs:
++                        var_origin = item["origin"]
++                        if "variable_value" in item and "variable_name" in item:
++                            # Standard variable output
++                            compute_steps_by_origin[var_origin]["outputs"].append(
++                                ArbitraryOutputs(
++                                    outputs={
++                                        item["variable_name"]: item["variable_value"]
++                                    }
++                                )
++                            )
++                        elif "messages" in item:
++                            # Message output from track_lm
++                            compute_steps_by_origin[var_origin]["outputs"].append(
++                                MessageOutputs(messages=item["messages"])
++                            )
++                        else:
++                            logger.warning(f"Unhandled traced output item: {item}")
++
++                    # Capture compute end time
++                    compute_ended = time.time()
++
++                    # Create compute steps grouped by origin
++                    for var_origin in ["agent", "environment"]:
++                        inputs = compute_steps_by_origin[var_origin]["inputs"]
++                        outputs = compute_steps_by_origin[var_origin]["outputs"]
++                        if inputs or outputs:
++                            event_order = (
++                                1 + len(event.environment_compute_steps) + 1
++                                if event
++                                else 1
++                            )
++                            compute_step = (
++                                AgentComputeStep(
++                                    event_order=event_order,
++                                    compute_began=compute_began,
++                                    compute_ended=compute_ended,
++                                    compute_input=inputs,
++                                    compute_output=outputs,
++                                )
++                                if var_origin == "agent"
++                                else EnvironmentComputeStep(
++                                    event_order=event_order,
++                                    compute_began=compute_began,
++                                    compute_ended=compute_ended,
++                                    compute_input=inputs,
++                                    compute_output=outputs,
++                                )
++                            )
++                            if event:
++                                if var_origin == "agent":
++                                    event.agent_compute_step = compute_step
++                                else:
++                                    event.environment_compute_steps.append(compute_step)
++
++                    # Optionally log the function result
++                    if log_result:
++                        logger.info(f"Function result: {result}")
++
++                    # Handle event management after function execution
++                    if manage_event == "end":
++                        context = get_current_context()
++                        current_event = _local.active_events.get(event_type)
++                        if current_event:
++                            current_event.closed = compute_ended
++
++                            # Get the config to determine logging mode
++                            config = get_tracing_config()
++
++                            # If immediate logging is enabled, send the event now
++                            if config.mode == LoggingMode.INSTANT:
++                                client = ImmediateLogClient(config)
++                                client.send_event(current_event, context)
++
++                            # Always store in event_store as backup
++                            event_store.add_event(
++                                context["system_name"],
++                                context["system_id"],
++                                context["system_instance_id"],
++                                current_event,
++                            )
++                            del _local.active_events[event_type]
+ 
+-                return result
+-            except Exception as e:
+-                logger.error(f"Exception in traced function '{func.__name__}': {e}")
+-                raise
+-            finally:
+-                # synth_tracker_sync.finalize()
+-                if hasattr(_local, "system_instance_id"):
+-                    # logger.debug(f"Cleaning up system_instance_id: {_local.system_instance_id}")
+-                    delattr(_local, "system_instance_id")
++                    # Process retry queue after successful execution
++                    process_retry_queue_sync()
++
++                    return result
++                except Exception as e:
++                    logger.error(f"Exception in traced function '{func.__name__}': {e}")
++                    raise
+ 
+         return wrapper
+ 
+@@ -254,7 +325,7 @@ def trace_system_async(
+     origin: Literal["agent", "environment"],
+     event_type: str,
+     log_result: bool = False,
+-    manage_event: Literal["create", "end", "lazy_end", None] = None,
++    manage_event: Literal["create", "end", "create_and_end", "lazy_end", None] = None,
+     increment_partition: bool = False,
+     verbose: bool = False,
+     finetune_step: bool = True,
+@@ -285,200 +356,195 @@ def trace_system_async(
+                         f"Instance of class '{self_instance.__class__.__name__}' missing required attribute '{attr}'"
+                     )
+ 
+-            # Set context variables
+-            system_instance_id_token = system_instance_id_var.set(
+-                self_instance.system_instance_id
+-            )
+-            system_name_token = system_name_var.set(self_instance.system_name)
+-            system_id_token = system_id_var.set(
+-                get_system_id(self_instance.system_name)
+-            )
+-
+-            # Initialize AsyncTrace
+-            synth_tracker_async.initialize()
+-
+-            # Initialize active_events if not present
+-            current_active_events = active_events_var.get()
+-            if not current_active_events:
+-                active_events_var.set({})
+-                # logger.debug("Initialized active_events in context vars")
+-
+-            event = None
+-            compute_began = time.time()
+-            try:
+-                if manage_event == "create":
+-                    # logger.debug("Creating new event")
+-                    event = Event(
+-                        system_instance_id=self_instance.system_instance_id,
+-                        event_type=event_type,
+-                        opened=compute_began,
+-                        closed=None,
+-                        partition_index=0,
+-                        agent_compute_step=None,
+-                        environment_compute_steps=[],
+-                        system_name=(system_name_var.get() or None),
+-                        system_id=(system_id_var.get() or None),
+-                    )
+-                    if increment_partition:
+-                        event.partition_index = event_store.increment_partition(
+-                            system_name_var.get(),
+-                            system_id_var.get(),
+-                            system_instance_id_var.get(),
++            # Use context manager for setup/cleanup
++            with trace_context(
++                system_name=self_instance.system_name,
++                system_id=get_system_id(self_instance.system_name),
++                system_instance_id=self_instance.system_instance_id,
++            ):
++                # Initialize AsyncTrace
++                synth_tracker_async.initialize()
++
++                event = None
++                compute_began = time.time()
++                try:
++                    if manage_event in ["create", "create_and_end"]:
++                        # Create new event
++                        context = get_current_context()
++                        event = Event(
++                            system_instance_id=context["system_instance_id"],
++                            event_type=event_type,
++                            opened=compute_began,
++                            closed=None,
++                            partition_index=0,
++                            agent_compute_step=None,
++                            environment_compute_steps=[],
++                            system_name=context["system_name"],
++                            system_id=context["system_id"],
+                         )
+-                        logger.debug(
+-                            f"Incremented partition to: {event.partition_index}"
++                        if increment_partition:
++                            event.partition_index = event_store.increment_partition(
++                                context["system_name"],
++                                context["system_id"],
++                                context["system_instance_id"],
++                            )
++                            logger.debug(
++                                f"Incremented partition to: {event.partition_index}"
++                            )
++                        set_current_event(event, decorator_type="async")
++                        logger.debug(f"Created and set new event: {event_type}")
++
++                    # Automatically trace function inputs
++                    bound_args = inspect.signature(func).bind(*args, **kwargs)
++                    bound_args.apply_defaults()
++                    for param, value in bound_args.arguments.items():
++                        if param == "self":
++                            continue
++                        synth_tracker_async.track_state(
++                            variable_name=param,
++                            variable_value=value,
++                            origin=origin,
++                            io_type="input",
+                         )
+ 
+-                    set_current_event(event, decorator_type="async")
+-                    logger.debug(f"Created and set new event: {event_type}")
+-
+-                # Automatically trace function inputs
+-                bound_args = inspect.signature(func).bind(*args, **kwargs)
+-                bound_args.apply_defaults()
+-                for param, value in bound_args.arguments.items():
+-                    if param == "self":
+-                        continue
+-                    synth_tracker_async.track_state(
+-                        variable_name=param,
+-                        variable_value=value,
+-                        origin=origin,
+-                        io_type="input",
++                    # Execute the coroutine
++                    result = await func(*args, **kwargs)
++
++                    # Automatically trace function output
++                    track_result(result, synth_tracker_async, origin)
++
++                    # Collect traced inputs and outputs
++                    traced_inputs, traced_outputs = (
++                        synth_tracker_async.get_traced_data()
+                     )
+ 
+-                # Execute the coroutine
+-                result = await func(*args, **kwargs)
+-
+-                # Automatically trace function output
+-                track_result(result, synth_tracker_async, origin)
+-
+-                # Collect traced inputs and outputs
+-                traced_inputs, traced_outputs = synth_tracker_async.get_traced_data()
+-
+-                compute_steps_by_origin: Dict[
+-                    Literal["agent", "environment"], Dict[str, List[Any]]
+-                ] = {
+-                    "agent": {"inputs": [], "outputs": []},
+-                    "environment": {"inputs": [], "outputs": []},
+-                }
+-
+-                # Organize traced data by origin
+-                for item in traced_inputs:
+-                    var_origin = item["origin"]
+-                    if "variable_value" in item and "variable_name" in item:
+-                        # Standard variable input
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            ArbitraryInputs(
+-                                inputs={item["variable_name"]: item["variable_value"]}
++                    compute_steps_by_origin: Dict[
++                        Literal["agent", "environment"], Dict[str, List[Any]]
++                    ] = {
++                        "agent": {"inputs": [], "outputs": []},
++                        "environment": {"inputs": [], "outputs": []},
++                    }
++
++                    # Organize traced data by origin
++                    for item in traced_inputs:
++                        var_origin = item["origin"]
++                        if "variable_value" in item and "variable_name" in item:
++                            # Standard variable input
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                ArbitraryInputs(
++                                    inputs={
++                                        item["variable_name"]: item["variable_value"]
++                                    }
++                                )
+                             )
+-                        )
+-                    elif "messages" in item:
+-                        # Message input from track_lm
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            MessageInputs(messages=item["messages"])
+-                        )
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            ArbitraryInputs(inputs={"model_name": item["model_name"]})
+-                        )
+-                        finetune = finetune_step or item["finetune"]
+-                        compute_steps_by_origin[var_origin]["inputs"].append(
+-                            ArbitraryInputs(inputs={"finetune": finetune})
+-                        )
+-                    else:
+-                        logger.warning(f"Unhandled traced input item: {item}")
+-
+-                for item in traced_outputs:
+-                    var_origin = item["origin"]
+-                    if "variable_value" in item and "variable_name" in item:
+-                        # Standard variable output
+-                        compute_steps_by_origin[var_origin]["outputs"].append(
+-                            ArbitraryOutputs(
+-                                outputs={item["variable_name"]: item["variable_value"]}
++                        elif "messages" in item:
++                            # Message input from track_lm
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                MessageInputs(messages=item["messages"])
+                             )
+-                        )
+-                    elif "messages" in item:
+-                        # Message output from track_lm
+-                        compute_steps_by_origin[var_origin]["outputs"].append(
+-                            MessageOutputs(messages=item["messages"])
+-                        )
+-                    else:
+-                        logger.warning(f"Unhandled traced output item: {item}")
+-
+-                compute_ended = time.time()
+-
+-                # Create compute steps grouped by origin
+-                for var_origin in ["agent", "environment"]:
+-                    inputs = compute_steps_by_origin[var_origin]["inputs"]
+-                    outputs = compute_steps_by_origin[var_origin]["outputs"]
+-                    if inputs or outputs:
+-                        event_order = (
+-                            1 + len(event.environment_compute_steps) + 1 if event else 1
+-                        )
+-                        compute_step = (
+-                            AgentComputeStep(
+-                                event_order=event_order,
+-                                compute_began=compute_began,
+-                                compute_ended=compute_ended,
+-                                compute_input=inputs,
+-                                compute_output=outputs,
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                ArbitraryInputs(
++                                    inputs={"model_name": item["model_name"]}
++                                )
+                             )
+-                            if var_origin == "agent"
+-                            else EnvironmentComputeStep(
+-                                event_order=event_order,
+-                                compute_began=compute_began,
+-                                compute_ended=compute_ended,
+-                                compute_input=inputs,
+-                                compute_output=outputs,
++                            finetune = finetune_step or item["finetune"]
++                            compute_steps_by_origin[var_origin]["inputs"].append(
++                                ArbitraryInputs(inputs={"finetune": finetune})
+                             )
+-                        )
+-                        if event:
+-                            if var_origin == "agent":
+-                                event.agent_compute_step = compute_step
+-                            else:
+-                                event.environment_compute_steps.append(compute_step)
+-                        # logger.debug(
+-                        #     f"Added compute step for {var_origin}: {compute_step.to_dict()}"
+-                        # )
+-                # Optionally log the function result
+-                if log_result:
+-                    logger.info(f"Function result: {result}")
+-
+-                # Handle event management after function execution
+-                if manage_event == "end" and event_type in active_events_var.get():
+-                    current_event = active_events_var.get()[event_type]
+-                    current_event.closed = compute_ended
+-                    # Store the event
+-                    if system_instance_id_var.get():
+-                        event_store.add_event(
+-                            system_name_var.get(),
+-                            system_id_var.get(),
+-                            system_instance_id_var.get(),
+-                            current_event,
+-                        )
+-                    active_events = active_events_var.get()
+-                    del active_events[event_type]
+-                    active_events_var.set(active_events)
++                        else:
++                            logger.warning(f"Unhandled traced input item: {item}")
++
++                    for item in traced_outputs:
++                        var_origin = item["origin"]
++                        if "variable_value" in item and "variable_name" in item:
++                            # Standard variable output
++                            compute_steps_by_origin[var_origin]["outputs"].append(
++                                ArbitraryOutputs(
++                                    outputs={
++                                        item["variable_name"]: item["variable_value"]
++                                    }
++                                )
++                            )
++                        elif "messages" in item:
++                            # Message output from track_lm
++                            compute_steps_by_origin[var_origin]["outputs"].append(
++                                MessageOutputs(messages=item["messages"])
++                            )
++                        else:
++                            logger.warning(f"Unhandled traced output item: {item}")
++
++                    compute_ended = time.time()
++
++                    # Create compute steps grouped by origin
++                    for var_origin in ["agent", "environment"]:
++                        inputs = compute_steps_by_origin[var_origin]["inputs"]
++                        outputs = compute_steps_by_origin[var_origin]["outputs"]
++                        if inputs or outputs:
++                            event_order = (
++                                1 + len(event.environment_compute_steps) + 1
++                                if event
++                                else 1
++                            )
++                            compute_step = (
++                                AgentComputeStep(
++                                    event_order=event_order,
++                                    compute_began=compute_began,
++                                    compute_ended=compute_ended,
++                                    compute_input=inputs,
++                                    compute_output=outputs,
++                                )
++                                if var_origin == "agent"
++                                else EnvironmentComputeStep(
++                                    event_order=event_order,
++                                    compute_began=compute_began,
++                                    compute_ended=compute_ended,
++                                    compute_input=inputs,
++                                    compute_output=outputs,
++                                )
++                            )
++                            if event:
++                                if var_origin == "agent":
++                                    event.agent_compute_step = compute_step
++                                else:
++                                    event.environment_compute_steps.append(compute_step)
++
++                    # Optionally log the function result
++                    if log_result:
++                        logger.info(f"Function result: {result}")
++
++                    # Handle event management after function execution
++                    if manage_event in ["end", "create_and_end"]:
++                        context = get_current_context()
++                        current_event = active_events_var.get().get(event_type)
++                        if current_event:
++                            current_event.closed = compute_ended
++
++                            # Get the config to determine logging mode
++                            config = get_tracing_config()
++
++                            # If immediate logging is enabled, send the event now
++                            if config.mode == LoggingMode.INSTANT:
++                                client = AsyncImmediateLogClient(config)
++                                await client.send_event(current_event, context)
++
++                            # Always store in event_store as backup
++                            event_store.add_event(
++                                context["system_name"],
++                                context["system_id"],
++                                context["system_instance_id"],
++                                current_event,
++                            )
++                            active_events = active_events_var.get()
++                            del active_events[event_type]
++                            active_events_var.set(active_events)
+ 
+-                return result
+-            except Exception as e:
+-                logger.error(f"Exception in traced function '{func.__name__}': {e}")
+-                raise
+-            finally:
+-                # Store any unclosed events before cleanup
+-                if event and not event.closed:
+-                    event.closed = time.time()
+-                    event_store.add_event(
+-                        system_name_var.get(),
+-                        system_id_var.get(),
+-                        system_instance_id_var.get(),
+-                        event,
+-                    )
+-                    logger.debug(f"Stored unclosed event {event_type} in finally block")
++                    # Process retry queue after successful execution
++                    await process_retry_queue_async()
+ 
+-                # Reset context variables
+-                system_instance_id_var.reset(system_instance_id_token)
+-                system_name_var.reset(system_name_token)
+-                system_id_var.reset(system_id_token)
+-                # logger.debug("Cleaning up system_instance_id from context vars")
++                    return result
++                except Exception as e:
++                    logger.error(f"Exception in traced function '{func.__name__}': {e}")
++                    raise
+ 
+         return async_wrapper
+ 
+diff --git a/synth_sdk/tracing/events/scope.py b/synth_sdk/tracing/events/scope.py
+index fba7f31..43fac78 100644
+--- a/synth_sdk/tracing/events/scope.py
++++ b/synth_sdk/tracing/events/scope.py
+@@ -2,9 +2,23 @@ import time
+ from contextlib import contextmanager
+ 
+ from synth_sdk.tracing.abstractions import Event
+-from synth_sdk.tracing.decorators import _local, clear_current_event, set_current_event
++from synth_sdk.tracing.config import LoggingMode
++from synth_sdk.tracing.decorators import (
++    _local,
++    clear_current_event,
++    get_tracing_config,
++    set_current_event,
++)
+ from synth_sdk.tracing.events.store import event_store
+-from synth_sdk.tracing.local import system_name_var, system_id_var, system_instance_id_var
++from synth_sdk.tracing.immediate_client import (
++    AsyncImmediateLogClient,
++    ImmediateLogClient,
++)
++from synth_sdk.tracing.local import (
++    system_id_var,
++    system_instance_id_var,
++    system_name_var,
++)
+ 
+ 
+ @contextmanager
+@@ -32,7 +46,9 @@ def event_scope(event_type: str):
+         else getattr(_local, "system_instance_id", None)
+     )
+     system_id = system_id_var.get() if is_async else getattr(_local, "system_id", None)
+-    system_name = system_name_var.get() if is_async else getattr(_local, "system_name", None)
++    system_name = (
++        system_name_var.get() if is_async else getattr(_local, "system_name", None)
 +    )
+ 
+     event = Event(
+         system_instance_id=system_instance_id,
+@@ -50,6 +66,25 @@ def event_scope(event_type: str):
+     finally:
+         event.closed = time.time()
+         clear_current_event(event_type)
+-        # Store the event if system_instance_id is available
 +
-+    class Config:
-+        """Pydantic model configuration"""
++        # Get the config to determine logging mode
++        config = get_tracing_config()
 +
-+        validate_assignment = True
-+        extra = "forbid"  # Prevent additional fields
++        # If immediate logging is enabled and we have system info, send the event now
++        if config.mode == LoggingMode.INSTANT and system_instance_id:
++            system_info = {
++                "system_name": system_name,
++                "system_id": system_id,
++                "system_instance_id": system_instance_id,
++            }
++            if is_async:
++                client = AsyncImmediateLogClient(config)
++                # Note: Since we can't use await in a finally block,
++                # we'll have to rely on the event store as primary storage in async context
++            else:
++                client = ImmediateLogClient(config)
++                client.send_event(event, system_info)
++
++        # Always store in event_store
+         if system_instance_id:
+             event_store.add_event(system_name, system_id, system_instance_id, event)
+diff --git a/synth_sdk/tracing/immediate_client.py b/synth_sdk/tracing/immediate_client.py
+index 8947ab0..4424538 100644
+--- a/synth_sdk/tracing/immediate_client.py
++++ b/synth_sdk/tracing/immediate_client.py
+@@ -1,11 +1,14 @@
+ import asyncio
++import logging
+ import time
+ from typing import Dict
+ 
+ from synth_sdk.tracing.abstractions import Event
+-from synth_sdk.tracing.base_client import BaseAsyncLogClient, BaseLogClient
+ from synth_sdk.tracing.client_manager import ClientManager
+ from synth_sdk.tracing.config import TracingConfig
++from synth_sdk.tracing.log_client_base import BaseAsyncLogClient, BaseLogClient
++
++logger = logging.getLogger(__name__)
+ 
+ 
+ class ImmediateLogClient(BaseLogClient):
+@@ -17,6 +20,10 @@ class ImmediateLogClient(BaseLogClient):
+ 
+     def send_event(self, event: Event, system_info: Dict[str, str]) -> bool:
+         """Send a single event with retries and fallback"""
++        from synth_sdk.tracing.retry_queue import (
++            retry_queue,  # Import here to avoid circular import
++        )
++
+         payload = self._prepare_payload(event, system_info)
+         last_exception = None
+ 
+@@ -42,7 +49,11 @@ class ImmediateLogClient(BaseLogClient):
+                 backoff = self.client_manager.calculate_backoff(attempt)
+                 time.sleep(backoff)
+ 
++        # If we get here, all immediate retries failed
+         self._handle_failure(event, system_info, last_exception)
++
++        # Add to retry queue for later processing
++        retry_queue.add_failed_event(event, system_info)
+         return False
+ 
+ 
+@@ -55,30 +66,38 @@ class AsyncImmediateLogClient(BaseAsyncLogClient):
+ 
+     async def send_event(self, event: Event, system_info: Dict[str, str]) -> bool:
+         """Send a single event with retries and fallback (async version)"""
++        from synth_sdk.tracing.retry_queue import retry_queue
++
++        #print(f"Attempting to send event {event.id} immediately")
+         payload = self._prepare_payload(event, system_info)
+         last_exception = None
+ 
+-        for attempt in range(self.config.max_retries):
++        for attempt in range(self.config.max_retries + 1):
+             try:
+-                response = await self.client_manager.async_client.post(
+-                    f"{self.config.base_url}/v1/traces/stream",
+-                    json=payload,
+-                    timeout=self.config.timeout,
+-                )
+-                response.raise_for_status()
+-                self._handle_success()
+-                return True
++                async with self.client_manager.async_client as client:
++                    response = await client.post(
++                        f"{self.config.base_url}/v1/events",
++                        json=payload,
++                        timeout=self.config.timeout,
++                    )
++                    response.raise_for_status()
++                    #print(f"Successfully sent event {event.id}")
++                    return True
++
+             except Exception as e:
+                 last_exception = e
+-                status_code = getattr(e, "response", None)
+-                if status_code:
+-                    status_code = status_code.status_code
+-
+-                if not self._should_retry(attempt, status_code):
+-                    break
+-
+-                backoff = self.client_manager.calculate_backoff(attempt)
+-                await asyncio.sleep(backoff)
+-
+-        self._handle_failure(event, system_info, last_exception)
++                # print(
++                #     f"Attempt {attempt+1} failed for event {event.id}: {str(e)}"
++                # )
++                if attempt < self.config.max_retries:
++                    backoff = self.client_manager.calculate_backoff(attempt)
++                    #print(f"Retrying event {event.id} in {backoff:.2f}s")
++                    await asyncio.sleep(backoff)
++
++        # Only reach here if all retries failed
++        # print(
++        #     f"All retries failed for event {event.id}, adding to retry queue. "
++        #     f"Last error: {str(last_exception)}"
++        # )
++        retry_queue.add_failed_event(event, system_info)
+         return False
+diff --git a/synth_sdk/tracing/local.py b/synth_sdk/tracing/local.py
+index 1240789..e83e807 100644
+--- a/synth_sdk/tracing/local.py
++++ b/synth_sdk/tracing/local.py
+@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
+ # Used for synchronous tracing
+ _local = threading.local()
+ # Used for asynchronous tracing
+-system_name_var: ContextVar[str] = ContextVar("system_name")
+-system_id_var: ContextVar[str] = ContextVar("system_id")
+-system_instance_id_var: ContextVar[str] = ContextVar("system_instance_id")
++system_name_var: ContextVar[str] = ContextVar("system_name", default=None)
++system_id_var: ContextVar[str] = ContextVar("system_id", default=None)
++system_instance_id_var: ContextVar[str] = ContextVar("system_instance_id", default=None)
+ active_events_var: ContextVar[dict] = ContextVar("active_events", default={})
+diff --git a/tests/streaming_test.py b/tests/streaming_test.py
+deleted file mode 100644
+index e69de29..0000000

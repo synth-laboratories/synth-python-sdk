@@ -73,52 +73,31 @@ def shutdown_tracer_provider():
     tracer_provider.shutdown()
 
 
-# Update VALID_TYPES to include NoneType
-VALID_TYPES = (BaseModel, str, dict, int, float, bool, list, type(None))
+# Valid types for tracking
+VALID_TYPES = (str, dict, int, float, bool, list, type(None), BaseModel)
 
 
 class LoggingMode(Enum):
-    """Logging mode for the tracing system"""
-
-    INSTANT = "instant"  # Send events immediately
-    DEFERRED = "deferred"  # Store events for later batch upload
+    INSTANT = "instant"
+    DEFERRED = "deferred"
 
 
 class TracingConfig(BaseModel):
-    """Configuration for the tracing system"""
-
-    # Basic settings
-    mode: LoggingMode
+    mode: LoggingMode = Field(default=LoggingMode.DEFERRED)
     api_key: str
-    base_url: str = Field(
-        default="https://agent-learning.onrender.com",
-        description="Base URL for the logging endpoint",
-    )
-
-    # Retry settings
-    max_retries: int = Field(
-        default=3,
-        ge=0,
-        description="Maximum number of retry attempts for failed requests",
-    )
-    retry_backoff: float = Field(
-        default=1.5, gt=0, description="Exponential backoff multiplier between retries"
-    )
+    base_url: str = Field(default="https://agent-learning.onrender.com")
+    max_retries: int = Field(default=3)
+    retry_backoff: float = Field(default=1.5)  # exponential backoff multiplier
+    batch_size: int = Field(default=1)  # for future batching support
+    timeout: float = Field(default=5.0)  # seconds
+    sdk_version: str = Field(default="0.1.0")  # Added sdk_version field
 
     # Connection settings
-    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
     max_connections: int = Field(
         default=100, gt=0, description="Maximum number of concurrent connections"
     )
     keepalive_expiry: float = Field(
         default=30.0, gt=0, description="Connection keepalive time in seconds"
-    )
-
-    # Batch settings (for future use)
-    batch_size: int = Field(
-        default=1,
-        ge=1,
-        description="Number of events to batch together (currently unused)",
     )
 
     class Config:

@@ -92,3 +92,31 @@ class ClientManager:
         if self._sync_client:
             self._sync_client.close()
             self._sync_client = None
+
+    @property
+    def config(self) -> TracingConfig:
+        """Get the current configuration.
+
+        Returns:
+            TracingConfig: The current configuration
+
+        Raises:
+            RuntimeError: If the client manager is not configured
+        """
+        if not self._config:
+            raise RuntimeError("ClientManager not configured")
+        return self._config
+
+    @config.setter
+    def config(self, value: TracingConfig) -> None:
+        """Set the configuration and reset clients.
+
+        Args:
+            value: The new configuration to use
+        """
+        self._config = value
+        self._close_clients()
+
+    def _close_clients(self):
+        self.close()
+        self.aclose()

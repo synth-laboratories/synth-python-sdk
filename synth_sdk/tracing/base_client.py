@@ -28,6 +28,8 @@ class BaseLogClient(ABC):
         self.config = config
         self._consecutive_failures = 0
         self._last_failure_time = 0
+        self._circuit_open = False
+        self._circuit_open_time = 0
 
     def _should_retry(self, attempt: int, status_code: Optional[int] = None) -> bool:
         """Determine if a retry should be attempted based on configuration and status"""
@@ -36,6 +38,10 @@ class BaseLogClient(ABC):
 
         # Don't retry on certain status codes
         if status_code:
+            # Always retry on 429 (Too Many Requests)
+            if status_code == 429:
+                return True
+
             # Don't retry on client errors except timeout/too many requests
             if 400 <= status_code < 500 and status_code not in (408, 429):
                 return False
@@ -50,7 +56,7 @@ class BaseLogClient(ABC):
             "event": event.to_dict(),
             "system_info": system_info,
             "timestamp": time.time(),
-            "sdk_version": "1.0.0",  # Replace with actual SDK version
+            "sdk_version": self.config.sdk_version,  # Use SDK version from config
         }
 
     def _handle_failure(

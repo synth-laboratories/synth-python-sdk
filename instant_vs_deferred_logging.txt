@@ -417,10 +417,8 @@ CONCRETE STEP BY STEP
 - Handle nested decorators
 
 ## Step 8: Error Handling & Resilience
-- Add exponential backoff
-- Implement proper retries
-- Add circuit breaker
-- Add error logging
+- Add logic where if a streaming endpoint hit fails, we save it in memory and then next time try to send both
+- reasonable (3s) retries for sending everything at the end of the run (batched upload)
 
 ## Step 9: Metrics & Monitoring
 - Add success/failure counters
