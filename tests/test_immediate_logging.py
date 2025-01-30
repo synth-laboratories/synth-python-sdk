@@ -71,11 +71,7 @@ async def setup():
     # Reset environment to default state
     logger.info("Setting up environment variables")
     os.environ["SYNTH_LOGGING_MODE"] = "instant"
-    os.environ["SYNTH_ENDPOINT_OVERRIDE"] = "http://localhost:8000"
-    os.environ["SYNTH_API_KEY"] = (
-        "sk_live_d7aedcdd-e34b-4955-b356-8cd392b650b2"  # Add API key  # Add API key  # Add API key
-    )  # Add API key
-
+    os.environ["SYNTH_ENDPOINT_OVERRIDE"] = "https://agent-learning.onrender.com"
     # Force new config to be read from env
     logger.info("Initializing client manager")
     config = get_tracing_config()

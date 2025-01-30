@@ -97,7 +97,7 @@ class AsyncImmediateLogClient(BaseAsyncLogClient):
                     )
                     return False
             except Exception as e:
-                logger.error(f"Failed to get auth token: {e}")
+                #logger.error(f"Failed to get auth token: {e}")
                 return False
 
             # Now send the event with the JWT token
@@ -143,14 +143,14 @@ class AsyncImmediateLogClient(BaseAsyncLogClient):
                         return True
 
                     except Exception as e:
-                        last_exception = e
-                        logger.error(f"Upload attempt {attempt + 1} failed: {str(e)}")
+                        #last_exception = e
+                        #logger.error(f"Upload attempt {attempt + 1} failed: {str(e)}")
                         if attempt < self.config.max_retries:
                             backoff = self.client_manager.calculate_backoff(attempt)
                             await asyncio.sleep(backoff)
 
-                logger.error(
-                    f"All upload attempts failed. Last error: {last_exception}"
-                )
+                # logger.error(
+                #     f"All upload attempts failed. Last error: {last_exception}"
+                # )
                 retry_queue.add_failed_event(event, system_info)
                 return False
