@@ -8,7 +8,7 @@ from opentelemetry.sdk.trace.export import (
     SimpleSpanProcessor,
     SpanExporter,
     SpanExportResult,
-)  # Changed from BatchSpanProcessor
+)
 from pydantic import BaseModel, Field
 
 
