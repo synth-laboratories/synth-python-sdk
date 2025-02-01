@@ -144,7 +144,7 @@ def trace_system_sync(
                 event = None
                 compute_began = time.time()
                 try:
-                    if manage_event == "create":
+                    if manage_event in ["create", "create_and_end"]:
                         # Create new event
                         context = get_current_context()
                         event = Event(
@@ -168,7 +168,6 @@ def trace_system_sync(
                                 f"Incremented partition to: {event.partition_index}"
                             )
                         set_current_event(event, decorator_type="sync")
-                        logger.debug(f"Created and set new event: {event_type}")
 
                     # Automatically trace function inputs
                     bound_args = inspect.signature(func).bind(*args, **kwargs)
@@ -176,6 +175,7 @@ def trace_system_sync(
                     for param, value in bound_args.arguments.items():
                         if param == "self":
                             continue
+                        print("Tracking state - 178")
                         synth_tracker_sync.track_state(
                             variable_name=param, variable_value=value, origin=origin
                         )
@@ -184,7 +184,7 @@ def trace_system_sync(
                     result = func(*args, **kwargs)
 
                     # Automatically trace function output
-                    track_result(result, synth_tracker_sync, origin)
+                    #track_result(result, synth_tracker_sync, origin)
 
                     # Collect traced inputs and outputs
                     traced_inputs, traced_outputs = synth_tracker_sync.get_traced_data()
@@ -197,7 +197,9 @@ def trace_system_sync(
                     }
 
                     # Organize traced data by origin
+                    #print("N items in traced inputs: ", len(traced_inputs), ["messages" in item for item in traced_inputs], [item.keys() for item in traced_inputs])
                     for item in traced_inputs:
+                        #print("Item: ", item)
                         var_origin = item["origin"]
                         if "variable_value" in item and "variable_name" in item:
                             # Standard variable input
@@ -208,24 +210,32 @@ def trace_system_sync(
                                     }
                                 )
                             )
+                            compute_steps_by_origin[var_origin]["finetune"] = item["finetune"] if "finetune" in item else False
+                            compute_steps_by_origin[var_origin]["model_name"] = item["model_name"] if "model_name" in item else None
+                            compute_steps_by_origin[var_origin]["model_params"] = item["model_params"] if "model_params" in item else None
                         elif "messages" in item:
                             # Message input from track_lm
                             compute_steps_by_origin[var_origin]["inputs"].append(
                                 MessageInputs(messages=item["messages"])
                             )
-                            compute_steps_by_origin[var_origin]["inputs"].append(
-                                ArbitraryInputs(
-                                    inputs={"model_name": item["model_name"]}
-                                )
+                            finetune = finetune_step or item["finetune"]
+                            compute_steps_by_origin[var_origin]["finetune"] = finetune
+
+                            model_name = item["model_name"]
+                            model_params = item["model_params"]
+                            compute_steps_by_origin[var_origin]["model_name"] = (
+                                model_name
                             )
-                            finetune = item["finetune"] or finetune_step
-                            compute_steps_by_origin[var_origin]["inputs"].append(
-                                ArbitraryInputs(inputs={"finetune": finetune})
+                            compute_steps_by_origin[var_origin]["model_params"] = (
+                                model_params
                             )
                         else:
                             logger.warning(f"Unhandled traced input item: {item}")
 
-                    for item in traced_outputs:
+                    #print("N items in traced outputs: ", len(traced_outputs), ["messages" in item for item in traced_outputs], [item.keys() for item in traced_outputs])
+
+                    # Temporary Kludge
+                    for item in [i for i in traced_outputs if "messages" in i]:
                         var_origin = item["origin"]
                         if "variable_value" in item and "variable_name" in item:
                             # Standard variable output
@@ -251,6 +261,9 @@ def trace_system_sync(
                     for var_origin in ["agent", "environment"]:
                         inputs = compute_steps_by_origin[var_origin]["inputs"]
                         outputs = compute_steps_by_origin[var_origin]["outputs"]
+                        should_learn = compute_steps_by_origin[var_origin]["finetune"] if "finetune" in compute_steps_by_origin[var_origin] else False
+                        model_name = compute_steps_by_origin[var_origin]["model_name"] if "model_name" in compute_steps_by_origin[var_origin] else None
+                        model_params = compute_steps_by_origin[var_origin]["model_params"] if "model_params" in compute_steps_by_origin[var_origin] else None
                         if inputs or outputs:
                             event_order = (
                                 1 + len(event.environment_compute_steps) + 1
@@ -259,6 +272,9 @@ def trace_system_sync(
                             )
                             compute_step = (
                                 AgentComputeStep(
+                                    model_name=model_name,
+                                    model_params=model_params,
+                                    should_learn=should_learn,
                                     event_order=event_order,
                                     compute_began=compute_began,
                                     compute_ended=compute_ended,
@@ -285,28 +301,22 @@ def trace_system_sync(
                         logger.info(f"Function result: {result}")
 
                     # Handle event management after function execution
-                    if manage_event == "end":
+                    if manage_event in ("end", "create_and_end"):
                         context = get_current_context()
                         current_event = _local.active_events.get(event_type)
                         if current_event:
                             current_event.closed = compute_ended
-
-                            # Get the config to determine logging mode
                             config = get_tracing_config()
-
-                            # If immediate logging is enabled, send the event now
                             if config.mode == LoggingMode.INSTANT:
                                 client = ImmediateLogClient(config)
                                 client.send_event(current_event, context)
-
-                            # Always store in event_store as backup
+                            #print("Adding this event: ", current_event)
                             event_store.add_event(
                                 context["system_name"],
                                 context["system_id"],
                                 context["system_instance_id"],
                                 current_event,
                             )
-                            del _local.active_events[event_type]
 
                     # Process retry queue after successful execution
                     process_retry_queue_sync()
@@ -392,7 +402,6 @@ def trace_system_async(
                                 f"Incremented partition to: {event.partition_index}"
                             )
                         set_current_event(event, decorator_type="async")
-                        logger.debug(f"Created and set new event: {event_type}")
 
                     # Automatically trace function inputs
                     bound_args = inspect.signature(func).bind(*args, **kwargs)
@@ -400,18 +409,19 @@ def trace_system_async(
                     for param, value in bound_args.arguments.items():
                         if param == "self":
                             continue
-                        synth_tracker_async.track_state(
-                            variable_name=param,
-                            variable_value=value,
-                            origin=origin,
-                            io_type="input",
-                        )
+                        # print("Tracking state - 412")
+                        # synth_tracker_async.track_state(
+                        #     variable_name=param,
+                        #     variable_value=value,
+                        #     origin=origin,
+                        #     io_type="input",
+                        # )
 
                     # Execute the coroutine
                     result = await func(*args, **kwargs)
 
                     # Automatically trace function output
-                    track_result(result, synth_tracker_async, origin)
+                    #track_result(result, synth_tracker_async, origin)
 
                     # Collect traced inputs and outputs
                     traced_inputs, traced_outputs = (
@@ -442,15 +452,18 @@ def trace_system_async(
                             compute_steps_by_origin[var_origin]["inputs"].append(
                                 MessageInputs(messages=item["messages"])
                             )
-                            compute_steps_by_origin[var_origin]["inputs"].append(
-                                ArbitraryInputs(
-                                    inputs={"model_name": item["model_name"]}
-                                )
-                            )
+                            # compute_steps_by_origin[var_origin]["inputs"].append(
+                            #     ArbitraryInputs(
+                            #         inputs={"model_name": item["model_name"]}
+                            #     )
+                            # )
                             finetune = finetune_step or item["finetune"]
-                            compute_steps_by_origin[var_origin]["inputs"].append(
-                                ArbitraryInputs(inputs={"finetune": finetune})
-                            )
+                            compute_steps_by_origin[var_origin]["finetune"] = finetune
+
+                            model_name = item["model_name"]
+                            model_params = item["model_params"]
+                            compute_steps_by_origin[var_origin]["model_name"] = model_name
+                            compute_steps_by_origin[var_origin]["model_params"] = model_params
                         else:
                             logger.warning(f"Unhandled traced input item: {item}")
 
@@ -474,11 +487,21 @@ def trace_system_async(
                             logger.warning(f"Unhandled traced output item: {item}")
 
                     compute_ended = time.time()
-
                     # Create compute steps grouped by origin
                     for var_origin in ["agent", "environment"]:
                         inputs = compute_steps_by_origin[var_origin]["inputs"]
                         outputs = compute_steps_by_origin[var_origin]["outputs"]
+                        model_name = compute_steps_by_origin[var_origin]["model_name"] if "model_name" in compute_steps_by_origin[var_origin] else None
+                        model_params = (
+                            compute_steps_by_origin[var_origin]["model_params"]
+                            if "model_params" in compute_steps_by_origin[var_origin]
+                            else None
+                        )
+                        should_learn = (
+                            compute_steps_by_origin[var_origin]["finetune"]
+                            if "finetune" in compute_steps_by_origin[var_origin]
+                            else False
+                        )
                         if inputs or outputs:
                             event_order = (
                                 1 + len(event.environment_compute_steps) + 1
@@ -487,6 +510,9 @@ def trace_system_async(
                             )
                             compute_step = (
                                 AgentComputeStep(
+                                    model_name=model_name,
+                                    model_params=model_params,
+                                    should_learn=should_learn,
                                     event_order=event_order,
                                     compute_began=compute_began,
                                     compute_ended=compute_ended,
@@ -602,6 +628,7 @@ def track_result(result, tracker, origin):
         # Track each element of the tuple that matches valid types
         for i, item in enumerate(result):
             try:
+                print("Tracking state - 631")
                 tracker.track_state(
                     variable_name=f"result_{i}", variable_value=item, origin=origin
                 )
@@ -610,6 +637,7 @@ def track_result(result, tracker, origin):
     else:
         # Track single result as before
         try:
+            print("Tracking state - 640")
             tracker.track_state(
                 variable_name="result", variable_value=result, origin=origin
             )

@@ -81,9 +81,10 @@ def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]
             f"Failed to load signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
         )
     else:
-        print(
-            f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
-        )
+        pass
+        # print(
+        #     f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
+        # )
 
 
 def send_system_traces_s3(
@@ -125,13 +126,6 @@ def send_system_traces_s3(
         response_data = response.json()
         upload_id = response_data.get("upload_id")
         signed_url = response_data.get("signed_url")
-        status = response_data.get("status")
-
-        if verbose:
-            print(f"Status: {status}")
-            print(f"Upload ID retrieved: {upload_id}")
-            print(f"Signed URL: {signed_url}")
-
         return upload_id, signed_url
     except requests.exceptions.HTTPError as e:
         logging.error(f"HTTP error occurred: {e}")
@@ -169,9 +163,6 @@ def get_upload_id(
         response.raise_for_status()
         upload_id = response.json()["upload_id"]
         signed_url = response.json()["signed_url"]
-        if verbose:
-            print(f"Upload ID retrieved: {upload_id}")
-            print(f"Signed URL retrieved: {signed_url}")
         return upload_id, signed_url
     except requests.exceptions.HTTPError as e:
         logging.error(f"HTTP error occurred: {e}")
