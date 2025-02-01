@@ -39,7 +39,7 @@ class EventStore:
                     system_id=system_id,
                     system_instance_id=system_instance_id,
                     metadata={},
-                    partition=[EventPartitionElement(partition_index=0, events=[])],
+                    partition=[],  # EventPartitionElement(partition_index=0, events=[])
                     current_partition_index=0,
                 )
             # logger.debug("Returning system trace")
@@ -90,7 +90,6 @@ class EventStore:
         # self.#logger.debug(
         #     f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
         # )
-        # print("Adding event to partition")
 
         # try:
         if not self._lock.acquire(timeout=5):
@@ -123,9 +122,6 @@ class EventStore:
                 )
 
             current_partition.events.append(event)
-            # self.#logger.debug(
-            #     f"Added event to partition {event.partition_index}. Total events: {len(current_partition.events)}"
-            # )
         finally:
             self._lock.release()
         # except Exception as e:

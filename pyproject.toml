@@ -1,6 +1,6 @@
 [project]
 name = "synth-sdk"
-version = "0.2.121"
+version = "0.2.123"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
@@ -12,7 +12,7 @@ dependencies = [
     "pydantic",
     "requests",
     "asyncio",
-    "zyk>=0.2.24",
+    "zyk==0.2.50",
     "build>=1.2.2.post1",
     "pypi",
     "twine>=4.0.0",

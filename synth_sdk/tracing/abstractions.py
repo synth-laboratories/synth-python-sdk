@@ -75,6 +75,8 @@ class ComputeStep:
 @dataclass
 class AgentComputeStep(ComputeStep):
     model_name: Optional[str] = None
+    model_params: Optional[Dict[str, Any]] = None
+    should_learn: Optional[bool] = None
     compute_input: List[Union[MessageInputs, ArbitraryInputs]]
     compute_output: List[Union[MessageOutputs, ArbitraryOutputs]]
 

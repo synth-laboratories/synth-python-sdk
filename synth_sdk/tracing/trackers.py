@@ -31,6 +31,7 @@ class SynthTrackerSync:
         cls,
         messages: List[Dict[str, str]],
         model_name: str,
+        model_params: Optional[Dict[str, Union[str, int, float]]] = None,
         finetune: bool = False,
     ):
         if getattr(cls._local, "initialized", False):
@@ -39,15 +40,12 @@ class SynthTrackerSync:
                     "origin": "agent",
                     "messages": messages,
                     "model_name": model_name,
+                    "model_params": model_params,
                     "finetune": finetune,
                 }
             )
-            # logger.debug("Tracked LM interaction")
         else:
             pass
-            # raise RuntimeError(
-            #     "Trace not initialized. Use within a function decorated with @trace_system_sync."
-            # )
 
     @classmethod
     def track_state(
@@ -140,6 +138,7 @@ class SynthTrackerAsync:
         cls,
         messages: List[Dict[str, str]],
         model_name: str,
+        model_params: Optional[Dict[str, Union[str, int, float]]] = None,
         finetune: bool = False,
     ):
         if trace_initialized_var.get():
@@ -149,11 +148,11 @@ class SynthTrackerAsync:
                     "origin": "agent",
                     "messages": messages,
                     "model_name": model_name,
+                    "model_params": model_params,
                     "finetune": finetune,
                 }
             )
             trace_inputs_var.set(trace_inputs)
-            # logger.debug("Tracked LM interaction")
         else:
             pass
             # raise RuntimeError(
@@ -260,8 +259,10 @@ class SynthTracker:
     def is_called_by_async(cls):
         try:
             asyncio.get_running_loop()  # Attempt to get the running event loop
+            print("DEBUG: Running in async context")  # Added logging
             return True  # If successful, we are in an async context
         except RuntimeError:
+            print("DEBUG: Running in sync context")  # Added logging
             return False  # If there's no running event loop, we are in a sync context
 
     @classmethod
@@ -269,6 +270,7 @@ class SynthTracker:
         cls,
         messages: List[Dict[str, str]],
         model_name: str,
+        model_params: Optional[Dict[str, Union[str, int, float]]] = None,
         finetune: bool = False,
     ):
         """
@@ -282,7 +284,7 @@ class SynthTracker:
                 - 'content': str - The content of the message
 
             model_name (str): Name of the language model being used
-                Examples: "gpt-4", "gpt-3.5-turbo", "claude-3-opus-20240229"
+                Examples: "gpt-4o-mini", "gpt-4o-mini", "claude-3-opus-20240229"
 
             finetune (bool, optional): Whether this interaction is part of a fine-tuning process.
                 Defaults to False.
@@ -301,18 +303,28 @@ class SynthTracker:
                 ]
                 SynthTracker.track_lm(
                     messages=messages,
-                    model_name="gpt-4"
+                    model_name="gpt-4o-mini"
                 )
             ```
         """
         if cls.is_called_by_async() and trace_initialized_var.get():
-            # logger.debug("Using async tracker to track LM")
-            synth_tracker_async.track_lm(messages, model_name, finetune)
+            print("DEBUG: Tracking LM call in async context")  # Added logging
+            synth_tracker_async.track_lm(
+                messages,
+                model_name,
+                model_params,
+                finetune,
+            )
         elif getattr(synth_tracker_sync._local, "initialized", False):
-            # logger.debug("Using sync tracker to track LM")
-            synth_tracker_sync.track_lm(messages, model_name, finetune)
+            print("DEBUG: Tracking LM call in sync context")  # Added logging
+            synth_tracker_sync.track_lm(
+                messages,
+                model_name,
+                model_params,
+                finetune,
+            )
         else:
-            # raise RuntimeError("Trace not initialized in track_lm.")
+            print("DEBUG: Skipping LM tracking - not initialized")  # Added logging
             pass
 
     @classmethod
@@ -383,23 +395,33 @@ class SynthTracker:
         ] = "",  # Force only async or sync data to be returned
     ) -> Tuple[list, list]:
         traced_inputs, traced_outputs = [], []
+        print(
+            f"\nDEBUG: Getting traced data with async_sync='{async_sync}'"
+        )  # Added logging
 
         if async_sync in ["async", ""]:
-            # logger.debug("Getting traced data from async tracker")
+            print("DEBUG: Retrieving async traced data")  # Added logging
             traced_inputs_async, traced_outputs_async = (
                 synth_tracker_async.get_traced_data()
             )
+            print(
+                f"DEBUG: Found {len(traced_inputs_async)} async inputs and {len(traced_outputs_async)} async outputs"
+            )  # Added logging
             traced_inputs.extend(traced_inputs_async)
             traced_outputs.extend(traced_outputs_async)
 
         if async_sync in ["sync", ""]:
-            # logger.debug("Getting traced data from sync tracker")
+            print("DEBUG: Retrieving sync traced data")  # Added logging
             traced_inputs_sync, traced_outputs_sync = (
                 synth_tracker_sync.get_traced_data()
             )
+            print(
+                f"DEBUG: Found {len(traced_inputs_sync)} sync inputs and {len(traced_outputs_sync)} sync outputs"
+            )  # Added logging
             traced_inputs.extend(traced_inputs_sync)
             traced_outputs.extend(traced_outputs_sync)
 
-        # TODO: Test that the order of the inputs and outputs is correct wrt
-        # the order of events since we are combining the two trackers
+        print(
+            f"DEBUG: Final combined data: {len(traced_inputs)} inputs and {len(traced_outputs)} outputs\n"
+        )  # Added logging
         return traced_inputs, traced_outputs

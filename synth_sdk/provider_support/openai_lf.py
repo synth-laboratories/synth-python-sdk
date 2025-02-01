@@ -12,7 +12,6 @@ from langfuse.client import StatefulGenerationClient
 from langfuse.decorators import langfuse_context
 from langfuse.utils import _get_timestamp
 from langfuse.utils.langfuse_singleton import LangfuseSingleton
-from openai._types import NotGiven
 from packaging.version import Version
 from pydantic import BaseModel
 from wrapt import wrap_function_wrapper
@@ -239,8 +238,11 @@ def _extract_chat_response(kwargs: dict):
 def _get_langfuse_data_from_kwargs(
     resource: OpenAiDefinition, langfuse: Langfuse, start_time, kwargs
 ):
-    name = kwargs.get("name", "OpenAI-generation")
+    #print("DEBUG: Entering _get_langfuse_data_from_kwargs")
+    #print("DEBUG: kwargs received:", kwargs)
 
+    name = kwargs.get("name", "OpenAI-generation")
+    #print("DEBUG: name =", name)
     if name is None:
         name = "OpenAI-generation"
 
@@ -249,26 +251,31 @@ def _get_langfuse_data_from_kwargs(
 
     decorator_context_observation_id = langfuse_context.get_current_observation_id()
     decorator_context_trace_id = langfuse_context.get_current_trace_id()
+    #print("DEBUG: decorator_context_observation_id =", decorator_context_observation_id)
+    #print("DEBUG: decorator_context_trace_id =", decorator_context_trace_id)
 
     trace_id = kwargs.get("trace_id", None) or decorator_context_trace_id
+    #print("DEBUG: trace_id =", trace_id)
     if trace_id is not None and not isinstance(trace_id, str):
         raise TypeError("trace_id must be a string")
 
     session_id = kwargs.get("session_id", None)
+    #print("DEBUG: session_id =", session_id)
     if session_id is not None and not isinstance(session_id, str):
         raise TypeError("session_id must be a string")
 
     user_id = kwargs.get("user_id", None)
+    #print("DEBUG: user_id =", user_id)
     if user_id is not None and not isinstance(user_id, str):
         raise TypeError("user_id must be a string")
 
     tags = kwargs.get("tags", None)
+    #print("DEBUG: tags =", tags)
     if tags is not None and (
         not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags)
     ):
         raise TypeError("tags must be a list of strings")
 
-    # Update trace params in decorator context if specified in openai call
     if decorator_context_trace_id:
         langfuse_context.update_current_trace(
             session_id=session_id, user_id=user_id, tags=tags
@@ -279,91 +286,66 @@ def _get_langfuse_data_from_kwargs(
         if decorator_context_observation_id != decorator_context_trace_id
         else None
     )
+    #print("DEBUG: parent_observation_id =", parent_observation_id)
     if parent_observation_id is not None and not isinstance(parent_observation_id, str):
         raise TypeError("parent_observation_id must be a string")
     if parent_observation_id is not None and trace_id is None:
         raise ValueError("parent_observation_id requires trace_id to be set")
 
     metadata = kwargs.get("metadata", {})
-
+    #print("DEBUG: metadata =", metadata)
     if metadata is not None and not isinstance(metadata, dict):
         raise TypeError("metadata must be a dictionary")
 
-    model = kwargs.get("model", None) or None
-
     prompt = None
-
     if resource.type == "completion":
         prompt = kwargs.get("prompt", None)
     elif resource.type == "chat":
         prompt = _extract_chat_prompt(kwargs)
+    # Extract model: first check top-level, then check inside 'inputs'
+    model = kwargs.get("model", None)
+    inputs = kwargs.get("inputs", {}) if kwargs.get("inputs", {}) else {}
+    if isinstance(inputs, dict):
+        #print("DEBUG: inputs =", inputs)
+        if "model_name" in inputs:
+            detailed_model = inputs["model_name"]
+            print("DEBUG: detailed_model =", detailed_model)
+            # If a detailed_model exists and is different from the top-level model, use it.
+            if detailed_model and (not model or model != detailed_model):
+                print("DEBUG: Upgrading model value from", model, "to", detailed_model)
+                model = detailed_model
+    #print("DEBUG: final model =", model)
+
+    # Extract model hyperparameters and add them to the new field 'model_params'
+    model_params = {
+        "temperature": kwargs.get("temperature", 1),
+        "max_tokens": kwargs.get("max_tokens", float("inf")),
+        "top_p": kwargs.get("top_p", 1),
+        "frequency_penalty": kwargs.get("frequency_penalty", 0),
+        "presence_penalty": kwargs.get("presence_penalty", 0),
+    }
+    if kwargs.get("seed", None) is not None:
+        model_params["seed"] = kwargs.get("seed", None)
 
     is_nested_trace = False
     if trace_id:
         is_nested_trace = True
         langfuse.trace(id=trace_id, session_id=session_id, user_id=user_id, tags=tags)
     else:
-        trace_id = (
-            decorator_context_trace_id
-            or langfuse.trace(
-                session_id=session_id,
-                user_id=user_id,
-                tags=tags,
-                name=name,
-                input=prompt,
-                metadata=metadata,
-            ).id
+        trace_instance = langfuse.trace(
+            session_id=session_id,
+            user_id=user_id,
+            tags=tags,
+            name=name,
+            input=prompt,
+            metadata=metadata,
         )
-
-    parsed_temperature = (
-        kwargs.get("temperature", 1)
-        if not isinstance(kwargs.get("temperature", 1), NotGiven)
-        else 1
-    )
-
-    parsed_max_tokens = (
-        kwargs.get("max_tokens", float("inf"))
-        if not isinstance(kwargs.get("max_tokens", float("inf")), NotGiven)
-        else float("inf")
-    )
-
-    parsed_top_p = (
-        kwargs.get("top_p", 1)
-        if not isinstance(kwargs.get("top_p", 1), NotGiven)
-        else 1
-    )
-
-    parsed_frequency_penalty = (
-        kwargs.get("frequency_penalty", 0)
-        if not isinstance(kwargs.get("frequency_penalty", 0), NotGiven)
-        else 0
-    )
-
-    parsed_presence_penalty = (
-        kwargs.get("presence_penalty", 0)
-        if not isinstance(kwargs.get("presence_penalty", 0), NotGiven)
-        else 0
-    )
-
-    parsed_seed = (
-        kwargs.get("seed", None)
-        if not isinstance(kwargs.get("seed", None), NotGiven)
-        else None
-    )
-
-    modelParameters = {
-        "temperature": parsed_temperature,
-        "max_tokens": parsed_max_tokens,  # casing?
-        "top_p": parsed_top_p,
-        "frequency_penalty": parsed_frequency_penalty,
-        "presence_penalty": parsed_presence_penalty,
-    }
-    if parsed_seed is not None:
-        modelParameters["seed"] = parsed_seed
+        trace_id = trace_instance.id
+        #print("DEBUG: Generated new trace_id =", trace_id)
 
     langfuse_prompt = kwargs.get("langfuse_prompt", None)
 
-    return {
+    extracted_data = {
         "name": name,
         "metadata": metadata,
         "trace_id": trace_id,
@@ -371,10 +353,26 @@ def _get_langfuse_data_from_kwargs(
         "user_id": user_id,
         "start_time": start_time,
         "input": prompt,
-        "model_parameters": modelParameters,
-        "model": model or None,
+        "model_params": {
+            "model_name": model or None,
+            "temperature": kwargs.get("temperature", 1),
+            "max_tokens": kwargs.get("max_tokens", float("inf")),
+            "top_p": kwargs.get("top_p", 1),
+            "frequency_penalty": kwargs.get("frequency_penalty", 0),
+            "presence_penalty": kwargs.get("presence_penalty", 0),
+        },
         "prompt": langfuse_prompt,
-    }, is_nested_trace
+    }
+
+    # Add seed to model_params if present
+    if kwargs.get("seed", None) is not None:
+        extracted_data["model_params"]["seed"] = kwargs.get("seed", None)
+
+    # print("DEBUG: Exiting _get_langfuse_data_from_kwargs with extracted_data:")
+    # print(extracted_data)
+    # print("DEBUG: is_nested_trace =", is_nested_trace)
+
+    return extracted_data, is_nested_trace
 
 
 def _create_langfuse_update(
@@ -383,14 +381,25 @@ def _create_langfuse_update(
     completion_start_time,
     model=None,
     usage=None,
+    model_params=None,
 ):
     update = {
         "end_time": _get_timestamp(),
         "output": completion,
         "completion_start_time": completion_start_time,
     }
-    if model is not None:
-        update["model"] = model
+
+    # Create model_params dictionary
+    model_params = {
+        "model_name": model or None,
+    }
+
+    # Add hyperparameters if provided
+    if model_params:
+        model_params.update(model_params)
+
+    # Add model_params to update
+    update["model_params"] = model_params
 
     if usage is not None:
         update["usage"] = usage
@@ -403,14 +412,24 @@ def _extract_streamed_openai_response(resource, chunks):
     # logger.debug(f"Number of chunks: {len(chunks)}")
     completion = defaultdict(str) if resource.type == "chat" else ""
     model = None
+    usage = None
 
     for chunk in chunks:
         if _is_openai_v1():
             chunk = chunk.__dict__
         # logger.debug(f"Processing chunk: {chunk}")
 
+        # Extract model name from chunk
         model = model or chunk.get("model", None) or None
-        usage = chunk.get("usage", None)
+
+        # Extract usage information
+        chunk_usage = chunk.get("usage", None)
+        if chunk_usage is not None:
+            if _is_openai_v1():
+                chunk_usage = chunk_usage.__dict__
+            usage = chunk_usage
+
+        # Process choices
         choices = chunk.get("choices", [])
         # logger.debug(f"Extracted - model: {model}, choices: {choices}")
 
@@ -422,14 +441,15 @@ def _get_langfuse_data_from_default_response(resource: OpenAiDefinition, respons
     if response is None:
         return None, "<NoneType response returned from OpenAI>", None
 
+    # Extract model name from response
     model = response.get("model", None) or None
 
+    # Extract completion based on resource type
     completion = None
     if resource.type == "completion":
         choices = response.get("choices", [])
         if len(choices) > 0:
             choice = choices[-1]
-
             completion = choice.text if _is_openai_v1() else choice.get("text", None)
     elif resource.type == "chat":
         choices = response.get("choices", [])
@@ -441,13 +461,12 @@ def _get_langfuse_data_from_default_response(resource: OpenAiDefinition, respons
                 else choice.get("message", None)
             )
 
+    # Extract usage information
     usage = response.get("usage", None)
+    if _is_openai_v1() and usage is not None:
+        usage = usage.__dict__
 
-    return (
-        model,
-        completion,
-        usage.__dict__ if _is_openai_v1() and usage is not None else usage,
-    )
+    return model, completion, usage
 
 
 def _is_openai_v1():
@@ -476,7 +495,7 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
     generation = new_langfuse.generation(**generation)
     try:
         openai_response = wrapped(**arg_extractor.get_openai_args())
-
+        
         if _is_streaming_response(openai_response):
             return LangfuseResponseGeneratorSync(
                 resource=open_ai_resource,
@@ -494,6 +513,14 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
                 if _is_openai_v1()
                 else openai_response,
             )
+            model_params = {
+                "model_name": model or None,
+                "temperature": kwargs.get("temperature", 1),
+                "max_tokens": kwargs.get("max_tokens", float("inf")),
+                "top_p": kwargs.get("top_p", 1),
+                "frequency_penalty": kwargs.get("frequency_penalty", 0),
+                "presence_penalty": kwargs.get("presence_penalty", 0),
+            }
 
             # Collect messages
             if open_ai_resource.type == "completion":
@@ -503,13 +530,17 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
 
                 # Track user input
                 synth_tracker_sync.track_lm(
-                    messages=message_input.messages, model_name=model, finetune=False
+                    messages=message_input.messages,
+                    model_name=model,
+                    model_params=model_params, finetune=False,
                 )
 
                 # Track assistant output separately
                 assistant_message = [{"role": "assistant", "content": completion}]
                 synth_tracker_sync.track_lm_output(
-                    messages=assistant_message, model_name=model, finetune=False
+                    messages=assistant_message,
+                    model_name=model,
+                    model_params=model_params, finetune=False,
                 )
 
             elif open_ai_resource.type == "chat":
@@ -518,7 +549,9 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
 
                 # Track user input
                 synth_tracker_sync.track_lm(
-                    messages=message_input.messages, model_name=model, finetune=False
+                    messages=message_input.messages,
+                    model_name=model,
+                    model_params=model_params,finetune=False,
                 )
 
                 # Track assistant output separately
@@ -533,12 +566,21 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
                 message_input = MessageInputs(messages=[])
 
             # Use track_lm
-            synth_tracker_sync.track_lm(
-                messages=message_input.messages, model_name=model, finetune=False
-            )
+            # synth_tracker_sync.track_lm(
+            #     messages=message_input.messages,
+            #     model_name=model,
+            #     model_params=model_params,finetune=False,
+            # )
+
+            
+            if kwargs.get("seed", None) is not None:
+                model_params["seed"] = kwargs.get("seed", None)
 
             generation.update(
-                model=model, output=completion, end_time=_get_timestamp(), usage=usage
+                model_params=model_params,
+                output=completion,
+                end_time=_get_timestamp(),
+                usage=usage,
             )
 
             # Avoiding the trace-update if trace-id is provided by user.
@@ -549,11 +591,22 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
     except Exception as ex:
         # log.warning(ex)
         model = kwargs.get("model", None) or None
+        model_params = {
+            "model_name": model or None,
+            "temperature": kwargs.get("temperature", 1),
+            "max_tokens": kwargs.get("max_tokens", float("inf")),
+            "top_p": kwargs.get("top_p", 1),
+            "frequency_penalty": kwargs.get("frequency_penalty", 0),
+            "presence_penalty": kwargs.get("presence_penalty", 0),
+        }
+        if kwargs.get("seed", None) is not None:
+            model_params["seed"] = kwargs.get("seed", None)
+
         generation.update(
             end_time=_get_timestamp(),
             status_message=str(ex),
             level="ERROR",
-            model=model,
+            model_params=model_params,
             usage={"input_cost": 0, "output_cost": 0, "total_cost": 0},
         )
         raise ex
@@ -571,8 +624,11 @@ async def _wrap_async(
         open_ai_resource, new_langfuse, start_time, arg_extractor.get_langfuse_args()
     )
     generation = new_langfuse.generation(**generation)
+
+
     try:
         openai_response = await wrapped(**arg_extractor.get_openai_args())
+        
 
         if _is_streaming_response(openai_response):
             return LangfuseResponseGeneratorAsync(
@@ -591,6 +647,14 @@ async def _wrap_async(
                 if _is_openai_v1()
                 else openai_response,
             )
+            model_params = {
+                "model_name": model or None,
+                "temperature": kwargs.get("temperature", 1),
+                "max_tokens": kwargs.get("max_tokens", float("inf")),
+                "top_p": kwargs.get("top_p", 1),
+                "frequency_penalty": kwargs.get("frequency_penalty", 0),
+                "presence_penalty": kwargs.get("presence_penalty", 0),
+            }
 
             # Collect messages
             if open_ai_resource.type == "completion":
@@ -600,7 +664,9 @@ async def _wrap_async(
 
                 # Track user input
                 synth_tracker_async.track_lm(
-                    messages=message_input.messages, model_name=model, finetune=False
+                    messages=message_input.messages,
+                    model_name=model,
+                    model_params=model_params, finetune=False,
                 )
 
                 # Track assistant output separately
@@ -615,7 +681,9 @@ async def _wrap_async(
 
                 # Track user input
                 synth_tracker_async.track_lm(
-                    messages=message_input.messages, model_name=model, finetune=False
+                    messages=message_input.messages,
+                    model_name=model,
+                    model_params=model_params,finetune=False,
                 )
 
                 # Track assistant output separately
@@ -630,12 +698,26 @@ async def _wrap_async(
                 message_input = MessageInputs(messages=[])
 
             # Use track_lm
-            synth_tracker_async.track_lm(
-                messages=message_input.messages, model_name=model, finetune=False
-            )
+            # synth_tracker_async.track_lm(
+            #     messages=message_input.messages,
+            #     model_name=model,
+            #     model_params=model_params,finetune=False,
+            # )
+
+            # Create model_params dictionary
+            model_params = {
+                "model_name": model or None,
+                "temperature": kwargs.get("temperature", 1),
+                "max_tokens": kwargs.get("max_tokens", float("inf")),
+                "top_p": kwargs.get("top_p", 1),
+                "frequency_penalty": kwargs.get("frequency_penalty", 0),
+                "presence_penalty": kwargs.get("presence_penalty", 0),
+            }
+            if kwargs.get("seed", None) is not None:
+                model_params["seed"] = kwargs.get("seed", None)
 
             generation.update(
-                model=model,
+                model_params=model_params,
                 output=completion,
                 end_time=_get_timestamp(),
                 usage=usage,
@@ -647,11 +729,22 @@ async def _wrap_async(
         return openai_response
     except Exception as ex:
         model = kwargs.get("model", None) or None
+        model_params = {
+            "model_name": model or None,
+            "temperature": kwargs.get("temperature", 1),
+            "max_tokens": kwargs.get("max_tokens", float("inf")),
+            "top_p": kwargs.get("top_p", 1),
+            "frequency_penalty": kwargs.get("frequency_penalty", 0),
+            "presence_penalty": kwargs.get("presence_penalty", 0),
+        }
+        if kwargs.get("seed", None) is not None:
+            model_params["seed"] = kwargs.get("seed", None)
+
         generation.update(
             end_time=_get_timestamp(),
             status_message=str(ex),
             level="ERROR",
-            model=model,
+            model_params=model_params,
             usage={"input_cost": 0, "output_cost": 0, "total_cost": 0},
         )
         raise ex
@@ -818,12 +911,40 @@ class LangfuseResponseGeneratorSync:
 
     def _finalize(self):
         logger.debug("Entering _finalize() in LangfuseResponseGeneratorSync...")
+        # First, extract values from the streamed response items
         model, completion, usage = _extract_streamed_openai_response(
             self.resource, self.items
         )
         logger.debug(
             "Extracted model=%s, completion=%s, usage=%s", model, completion, usage
         )
+
+        # Look through the streamed items for a detailed model in the additional "inputs"
+        for item in self.items:
+            if isinstance(item, dict):
+                inputs = item.get("inputs")
+                if isinstance(inputs, dict):
+                    detailed = inputs.get("model_name")
+                    if detailed and detailed != model:
+                        logger.debug(
+                            "Upgrading model value from %s to %s based on streamed inputs",
+                            model,
+                            detailed,
+                        )
+                        model = detailed
+                        break
+        logger.debug("Final model after _finalize check: %s", model)
+
+        # Create model hyperparameters dictionary
+        model_params = {
+            "temperature": self.kwargs.get("temperature", 1),
+            "max_tokens": self.kwargs.get("max_tokens", float("inf")),
+            "top_p": self.kwargs.get("top_p", 1),
+            "frequency_penalty": self.kwargs.get("frequency_penalty", 0),
+            "presence_penalty": self.kwargs.get("presence_penalty", 0),
+        }
+        if self.kwargs.get("seed") is not None:
+            model_params["seed"] = self.kwargs.get("seed")
 
         if self.resource.type == "completion":
             user_prompt = self.kwargs.get("prompt", "")
@@ -837,7 +958,6 @@ class LangfuseResponseGeneratorSync:
             logger.debug(
                 "Existing 'messages' from kwargs before appending: %s", messages
             )
-            # If completion is a dict, ensure we extract 'content' safely
             if isinstance(completion, dict) and "content" in completion:
                 messages.append({"role": "assistant", "content": completion["content"]})
             message_input = MessageInputs(messages=messages)
@@ -846,24 +966,28 @@ class LangfuseResponseGeneratorSync:
             message_input = MessageInputs(messages=[])
 
         logger.debug(
-            "Calling track_lm with messages: %s, model: %s",
+            "Calling track_lm (sync) with messages: %s, model: %s",
             message_input.messages,
             model,
         )
         synth_tracker_sync.track_lm(
-            messages=message_input.messages, model_name=model, finetune=False
+            messages=message_input.messages,
+            model_name=model,
+            model_params=model_params,finetune=False,
         )
 
-        # Avoiding the trace-update if trace-id is provided by user.
+        # Avoid the trace update if a trace-id was provided by the user.
         if not self.is_nested_trace:
             self.langfuse.trace(id=self.generation.trace_id, output=completion)
 
+        # Pass the updated model and hyperparameters downstream in the update event.
         _create_langfuse_update(
             completion,
             self.generation,
             self.completion_start_time,
             model=model,
             usage=usage,
+            model_params=model_params,
         )
 
 
@@ -931,6 +1055,33 @@ class LangfuseResponseGeneratorAsync:
             "Extracted model=%s, completion=%s, usage=%s", model, completion, usage
         )
 
+        # Look through the streamed items for a detailed model in the additional "inputs"
+        for item in self.items:
+            if isinstance(item, dict):
+                inputs = item.get("inputs")
+                if isinstance(inputs, dict):
+                    detailed = inputs.get("model_name")
+                    if detailed and detailed != model:
+                        logger.debug(
+                            "Upgrading model value from %s to %s based on streamed inputs",
+                            model,
+                            detailed,
+                        )
+                        model = detailed
+                        break
+        logger.debug("Final model after _finalize check: %s", model)
+
+        # Create model hyperparameters dictionary
+        model_params = {
+            "temperature": self.kwargs.get("temperature", 1),
+            "max_tokens": self.kwargs.get("max_tokens", float("inf")),
+            "top_p": self.kwargs.get("top_p", 1),
+            "frequency_penalty": self.kwargs.get("frequency_penalty", 0),
+            "presence_penalty": self.kwargs.get("presence_penalty", 0),
+        }
+        if self.kwargs.get("seed") is not None:
+            model_params["seed"] = self.kwargs.get("seed")
+
         if self.resource.type == "completion":
             user_prompt = self.kwargs.get("prompt", "")
             messages = [
@@ -957,7 +1108,9 @@ class LangfuseResponseGeneratorAsync:
             model,
         )
         synth_tracker_async.track_lm(
-            messages=message_input.messages, model_name=model, finetune=False
+            messages=message_input.messages,
+            model_name=model,
+            model_params=model_params, finetune=False,
         )
 
         # Avoiding the trace-update if trace-id is provided by user.
@@ -970,6 +1123,7 @@ class LangfuseResponseGeneratorAsync:
             self.completion_start_time,
             model=model,
             usage=usage,
+            model_params=model_params,
         )
 
     async def close(self) -> None:
