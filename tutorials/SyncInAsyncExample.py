@@ -3,12 +3,13 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from synth_sdk.tracing.abstractions import Dataset, RewardSignal, TrainingQuestion
-from synth_sdk.tracing.decorators import _local, trace_system, trace_system_sync
+from synth_sdk.tracing.decorators import _local, trace_event_sync, trace_system
 from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.trackers import SynthTracker, SynthTrackerSync
 from synth_sdk.tracing.upload import upload
@@ -38,7 +39,7 @@ class TestAgent:
         self.client = OpenAI(api_key=openai_api_key)
         logger.debug("OpenAI client initialized")
 
-    @trace_system_sync(
+    @trace_event_sync(
         origin="agent",
         event_type="lm_call",
         manage_event="create",
@@ -122,23 +123,24 @@ async def run_test():
 
         logger.info("Creating dataset for upload")
         # Create dataset for upload
+        question_ids = [f"q{i}_{uuid.uuid4().hex[:8]}" for i in range(len(questions))]
         dataset = Dataset(
             questions=[
                 TrainingQuestion(
                     intent="Test question",
                     criteria="Testing tracing functionality",
-                    question_id=f"q{i}",
+                    question_id=qid,  # Use pre-generated ID
                 )
-                for i in range(len(questions))
+                for qid in question_ids
             ],
             reward_signals=[
                 RewardSignal(
-                    question_id=f"q{i}",
+                    question_id=qid,  # Use same pre-generated ID
                     system_instance_id=agent.system_instance_id,
                     reward=1.0,
                     annotation="Test reward",
                 )
-                for i in range(len(questions))
+                for qid in question_ids
             ],
         )
         logger.debug(
@@ -195,7 +197,12 @@ async def run_test():
                     event.closed = time.time()
                     if hasattr(_local, "system_instance_id"):
                         try:
-                            event_store(_local.system_name, _local.system_id, _local.system_instance_id, event)
+                            event_store(
+                                _local.system_name,
+                                _local.system_id,
+                                _local.system_instance_id,
+                                event,
+                            )
                             logger.debug(
                                 "Successfully cleaned up event: %s", event_type
                             )

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -123,23 +124,24 @@ def run_test():
 
         logger.info("Creating dataset for upload")
         # Create dataset for upload
+        question_ids = [f"q{i}_{uuid.uuid4().hex[:8]}" for i in range(len(questions))]
         dataset = Dataset(
             questions=[
                 TrainingQuestion(
                     intent="Test question",
                     criteria="Testing tracing functionality",
-                    question_id=f"q{i}",
+                    question_id=qid,  # Use pre-generated ID
                 )
-                for i in range(len(questions))
+                for qid in question_ids
             ],
             reward_signals=[
                 RewardSignal(
-                    question_id=f"q{i}",
+                    question_id=qid,  # Use same pre-generated ID
                     system_instance_id=agent.system_instance_id,
                     reward=1.0,
                     annotation="Test reward",
                 )
-                for i in range(len(questions))
+                for qid in question_ids
             ],
         )
         logger.debug(
@@ -196,7 +198,12 @@ def run_test():
                     event.closed = time.time()
                     if hasattr(_local, "system_instance_id"):
                         try:
-                            event_store.add_event(_local.system_name, _local.system_id, _local.system_instance_id, event)
+                            event_store.add_event(
+                                _local.system_name,
+                                _local.system_id,
+                                _local.system_instance_id,
+                                event,
+                            )
                             logger.debug(
                                 "Successfully cleaned up event: %s", event_type
                             )

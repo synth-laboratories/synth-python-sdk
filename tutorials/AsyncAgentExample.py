@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -125,13 +126,13 @@ async def run_test():
                 TrainingQuestion(
                     intent="Test question",
                     criteria="Testing tracing functionality",
-                    question_id=f"q{i}",
+                    question_id=f"q{i}_{uuid.uuid4().hex[:8]}",
                 )
                 for i in range(len(questions))
             ],
             reward_signals=[
                 RewardSignal(
-                    question_id=f"q{i}",
+                    question_id=f"q{i}_{uuid.uuid4().hex[:8]}",
                     system_instance_id=agent.system_instance_id,
                     reward=1.0,
                     annotation="Test reward",

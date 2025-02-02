@@ -14,7 +14,7 @@ class SynthTrackerSync:
     """Tracker for synchronous functions.
 
     Purpose is to annotate the inside of your sync functions to track intermediate values.
-    Decorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.
+    Decorator @trace_event_sync is used to annotate the functions and track the inputs and outputs.
     This tracker is instead used to access the data inside of decorated functions.
     """
 
@@ -74,7 +74,7 @@ class SynthTrackerSync:
         else:
             pass
             # raise RuntimeError(
-            #     "Trace not initialized. Use within a function decorated with @trace_system_sync."
+            #     "Trace not initialized. Use within a function decorated with @trace_event_sync."
             # )
 
     @classmethod
@@ -122,7 +122,7 @@ class SynthTrackerAsync:
     """Tracker for synchronous functions.
 
     Purpose is to annotate the inside of your sync functions to track intermediate values.
-    Decorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.
+    Decorator @trace_event_sync is used to annotate the functions and track the inputs and outputs.
     This tracker is instead used to access the data inside of decorated functions.
     """
 
@@ -156,7 +156,7 @@ class SynthTrackerAsync:
         else:
             pass
             # raise RuntimeError(
-            #     "Trace not initialized. Use within a function decorated with @trace_system_async."
+            #     "Trace not initialized. Use within a function decorated with @trace_event_async."
             # )
 
     @classmethod
@@ -201,7 +201,7 @@ class SynthTrackerAsync:
         else:
             pass
             # raise RuntimeError(
-            #     "Trace not initialized. Use within a function decorated with @trace_system_async."
+            #     "Trace not initialized. Use within a function decorated with @trace_event_async."
             # )
 
     @classmethod
@@ -251,7 +251,7 @@ class SynthTracker:
     """Tracker for synchronous and asynchronous functions. Intelligently chooses between sync and async trackers.
 
     Purpose is to annotate the inside of your sync and async functions to track intermediate values.
-    Decorators @trace_system_sync and @trace_system_async are used to annotate the functions and track the inputs and outputs.
+    Decorators @trace_event_sync and @trace_event_async are used to annotate the functions and track the inputs and outputs.
     This tracker is instead used to access the data inside of decorated functions.
     """
 
@@ -290,13 +290,13 @@ class SynthTracker:
                 Defaults to False.
 
         Raises:
-            RuntimeError: If called outside a traced context (use with @trace_system_sync
-                or @trace_system_async decorator)
+            RuntimeError: If called outside a traced context (use with @trace_event_sync
+                or @trace_event_async decorator)
             TypeError: If messages or model_name are not of the correct type
 
         Example:
             ```python
-            @trace_system_sync(origin="agent", event_type="chat")
+            @trace_event_sync(origin="agent", event_type="chat")
             def process_chat(self, user_input: str):
                 messages = [
                     {"role": "user", "content": user_input}
@@ -356,14 +356,14 @@ class SynthTracker:
                 Defaults to None.
 
         Raises:
-            RuntimeError: If called outside a traced context (use with @trace_system_sync
-                or @trace_system_async decorator)
+            RuntimeError: If called outside a traced context (use with @trace_event_sync
+                or @trace_event_async decorator)
             TypeError: If variable_value is not one of the supported types
             ValueError: If origin is not "agent" or "environment"
 
         Example:
             ```python
-            @trace_system_sync(origin="agent", event_type="process")
+            @trace_event_sync(origin="agent", event_type="process")
             def update_state(self, new_value: dict):
                 SynthTracker.track_state(
                     variable_name="system_state",
@@ -425,3 +425,96 @@ class SynthTracker:
             f"DEBUG: Final combined data: {len(traced_inputs)} inputs and {len(traced_outputs)} outputs\n"
         )  # Added logging
         return traced_inputs, traced_outputs
+
+    @classmethod
+    def track_lm_output(
+        cls,
+        messages: List[Dict[str, str]],
+        model_name: str,
+        finetune: bool = False,
+    ):
+        """
+        Tracks 'messages' as if they were output from the LLM.
+        Automatically detects whether to use sync or async tracking.
+        """
+        if cls.is_called_by_async() and trace_initialized_var.get():
+            print("DEBUG: Tracking LM output in async context")
+            synth_tracker_async.track_lm_output(
+                messages=messages,
+                model_name=model_name,
+                finetune=finetune,
+            )
+        elif getattr(synth_tracker_sync._local, "initialized", False):
+            print("DEBUG: Tracking LM output in sync context")
+            synth_tracker_sync.track_lm_output(
+                messages=messages,
+                model_name=model_name,
+                finetune=finetune,
+            )
+        else:
+            print("DEBUG: Skipping LM output tracking - not initialized")
+            pass
+
+
+def track_messages_sync(
+    input_messages: List[Dict[str, str]],
+    output_messages: List[Dict[str, str]],
+    model_name: str,
+    model_params: Optional[Dict[str, Union[str, int, float]]] = None,
+    finetune: bool = False,
+) -> None:
+    """Wrapper function to track both input and output messages in a conversation synchronously.
+
+    Args:
+        input_messages: List of input message dictionaries (e.g., user messages)
+        output_messages: List of output message dictionaries (e.g., assistant responses)
+        model_name: Name of the language model being used
+        model_params: Optional parameters used for the model
+        finetune: Whether this conversation should be used for fine-tuning
+    """
+    # Track input messages
+    synth_tracker_sync.track_lm(
+        messages=input_messages,
+        model_name=model_name,
+        model_params=model_params,
+        finetune=finetune,
+    )
+
+    # Track output messages
+    synth_tracker_sync.track_lm_output(
+        messages=output_messages,
+        model_name=model_name,
+        finetune=finetune,
+    )
+
+
+async def track_messages_async(
+    input_messages: List[Dict[str, str]],
+    output_messages: List[Dict[str, str]],
+    model_name: str,
+    model_params: Optional[Dict[str, Union[str, int, float]]] = None,
+    finetune: bool = False,
+) -> None:
+    """Wrapper function to track both input and output messages in a conversation asynchronously.
+
+    Args:
+        input_messages: List of input message dictionaries (e.g., user messages)
+        output_messages: List of output message dictionaries (e.g., assistant responses)
+        model_name: Name of the language model being used
+        model_params: Optional parameters used for the model
+        finetune: Whether this conversation should be used for fine-tuning
+    """
+    # Track input messages
+    synth_tracker_async.track_lm(
+        messages=input_messages,
+        model_name=model_name,
+        model_params=model_params,
+        finetune=finetune,
+    )
+
+    # Track output messages
+    synth_tracker_async.track_lm_output(
+        messages=output_messages,
+        model_name=model_name,
+        finetune=finetune,
+    )
