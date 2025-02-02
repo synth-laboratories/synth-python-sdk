@@ -1,5 +1,6 @@
 import logging
 
+
 class ExcludeLangfuseMessagesFilter(logging.Filter):
     def filter(self, record):
         # Return False to exclude the record, True to include it

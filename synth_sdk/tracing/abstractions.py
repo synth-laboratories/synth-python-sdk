@@ -126,8 +126,6 @@ class Event:
         """Backwards compatibility method that returns a list containing the agent_compute_step."""
         return [self.agent_compute_step] if self.agent_compute_step is not None else []
 
-   
-
 
 @dataclass
 class EventPartitionElement:

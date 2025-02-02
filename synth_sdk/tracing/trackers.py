@@ -34,7 +34,7 @@ class SynthTrackerSync:
         model_params: Optional[Dict[str, Union[str, int, float]]] = None,
         finetune: bool = False,
     ):
-        #print("Tracking LM call in sync context - ",messages)  # Added logging
+        # print("Tracking LM call in sync context - ",messages)  # Added logging
         if getattr(cls._local, "initialized", False):
             cls._local.inputs.append(
                 {
@@ -142,7 +142,7 @@ class SynthTrackerAsync:
         model_params: Optional[Dict[str, Union[str, int, float]]] = None,
         finetune: bool = False,
     ):
-        #print("Tracking LM call in async context")  # Added logging
+        # print("Tracking LM call in async context")  # Added logging
         if trace_initialized_var.get():
             trace_inputs = trace_inputs_var.get()
             trace_inputs.append(
@@ -311,7 +311,7 @@ class SynthTracker:
             ```
         """
         if cls.is_called_by_async() and trace_initialized_var.get():
-            #print("DEBUG: Tracking LM call in async context")  # Added logging
+            # print("DEBUG: Tracking LM call in async context")  # Added logging
             synth_tracker_async.track_lm(
                 messages,
                 model_name,
@@ -319,7 +319,7 @@ class SynthTracker:
                 finetune,
             )
         elif getattr(synth_tracker_sync._local, "initialized", False):
-            #print("DEBUG: Tracking LM call in sync context")  # Added logging
+            # print("DEBUG: Tracking LM call in sync context")  # Added logging
             synth_tracker_sync.track_lm(
                 messages,
                 model_name,

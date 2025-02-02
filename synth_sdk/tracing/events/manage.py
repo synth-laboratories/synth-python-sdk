@@ -88,7 +88,7 @@ def set_current_event(
 
         # Get current active events from context var
         active_events = active_events_var.get()
-        #print("Active events:", active_events)
+        # print("Active events:", active_events)
         # If there's an existing event of the same type, end it
         if event and event.event_type in active_events:
             existing_event = active_events[event.event_type]

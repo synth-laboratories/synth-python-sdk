@@ -238,11 +238,11 @@ def _extract_chat_response(kwargs: dict):
 def _get_langfuse_data_from_kwargs(
     resource: OpenAiDefinition, langfuse: Langfuse, start_time, kwargs
 ):
-    #print("DEBUG: Entering _get_langfuse_data_from_kwargs")
-    #print("DEBUG: kwargs received:", kwargs)
+    # print("DEBUG: Entering _get_langfuse_data_from_kwargs")
+    # print("DEBUG: kwargs received:", kwargs)
 
     name = kwargs.get("name", "OpenAI-generation")
-    #print("DEBUG: name =", name)
+    # print("DEBUG: name =", name)
     if name is None:
         name = "OpenAI-generation"
 
@@ -251,26 +251,26 @@ def _get_langfuse_data_from_kwargs(
 
     decorator_context_observation_id = langfuse_context.get_current_observation_id()
     decorator_context_trace_id = langfuse_context.get_current_trace_id()
-    #print("DEBUG: decorator_context_observation_id =", decorator_context_observation_id)
-    #print("DEBUG: decorator_context_trace_id =", decorator_context_trace_id)
+    # print("DEBUG: decorator_context_observation_id =", decorator_context_observation_id)
+    # print("DEBUG: decorator_context_trace_id =", decorator_context_trace_id)
 
     trace_id = kwargs.get("trace_id", None) or decorator_context_trace_id
-    #print("DEBUG: trace_id =", trace_id)
+    # print("DEBUG: trace_id =", trace_id)
     if trace_id is not None and not isinstance(trace_id, str):
         raise TypeError("trace_id must be a string")
 
     session_id = kwargs.get("session_id", None)
-    #print("DEBUG: session_id =", session_id)
+    # print("DEBUG: session_id =", session_id)
     if session_id is not None and not isinstance(session_id, str):
         raise TypeError("session_id must be a string")
 
     user_id = kwargs.get("user_id", None)
-    #print("DEBUG: user_id =", user_id)
+    # print("DEBUG: user_id =", user_id)
     if user_id is not None and not isinstance(user_id, str):
         raise TypeError("user_id must be a string")
 
     tags = kwargs.get("tags", None)
-    #print("DEBUG: tags =", tags)
+    # print("DEBUG: tags =", tags)
     if tags is not None and (
         not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags)
     ):
@@ -286,14 +286,14 @@ def _get_langfuse_data_from_kwargs(
         if decorator_context_observation_id != decorator_context_trace_id
         else None
     )
-    #print("DEBUG: parent_observation_id =", parent_observation_id)
+    # print("DEBUG: parent_observation_id =", parent_observation_id)
     if parent_observation_id is not None and not isinstance(parent_observation_id, str):
         raise TypeError("parent_observation_id must be a string")
     if parent_observation_id is not None and trace_id is None:
         raise ValueError("parent_observation_id requires trace_id to be set")
 
     metadata = kwargs.get("metadata", {})
-    #print("DEBUG: metadata =", metadata)
+    # print("DEBUG: metadata =", metadata)
     if metadata is not None and not isinstance(metadata, dict):
         raise TypeError("metadata must be a dictionary")
 
@@ -306,7 +306,7 @@ def _get_langfuse_data_from_kwargs(
     model = kwargs.get("model", None)
     inputs = kwargs.get("inputs", {}) if kwargs.get("inputs", {}) else {}
     if isinstance(inputs, dict):
-        #print("DEBUG: inputs =", inputs)
+        # print("DEBUG: inputs =", inputs)
         if "model_name" in inputs:
             detailed_model = inputs["model_name"]
             print("DEBUG: detailed_model =", detailed_model)
@@ -314,7 +314,7 @@ def _get_langfuse_data_from_kwargs(
             if detailed_model and (not model or model != detailed_model):
                 print("DEBUG: Upgrading model value from", model, "to", detailed_model)
                 model = detailed_model
-    #print("DEBUG: final model =", model)
+    # print("DEBUG: final model =", model)
 
     # Extract model hyperparameters and add them to the new field 'model_params'
     model_params = {
@@ -341,7 +341,7 @@ def _get_langfuse_data_from_kwargs(
             metadata=metadata,
         )
         trace_id = trace_instance.id
-        #print("DEBUG: Generated new trace_id =", trace_id)
+        # print("DEBUG: Generated new trace_id =", trace_id)
 
     langfuse_prompt = kwargs.get("langfuse_prompt", None)
 
@@ -495,7 +495,7 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
     generation = new_langfuse.generation(**generation)
     try:
         openai_response = wrapped(**arg_extractor.get_openai_args())
-        
+
         if _is_streaming_response(openai_response):
             return LangfuseResponseGeneratorSync(
                 resource=open_ai_resource,
@@ -532,7 +532,8 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
                 synth_tracker_sync.track_lm(
                     messages=message_input.messages,
                     model_name=model,
-                    model_params=model_params, finetune=False,
+                    model_params=model_params,
+                    finetune=False,
                 )
 
                 # Track assistant output separately
@@ -540,7 +541,8 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
                 synth_tracker_sync.track_lm_output(
                     messages=assistant_message,
                     model_name=model,
-                    model_params=model_params, finetune=False,
+                    model_params=model_params,
+                    finetune=False,
                 )
 
             elif open_ai_resource.type == "chat":
@@ -551,7 +553,8 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
                 synth_tracker_sync.track_lm(
                     messages=message_input.messages,
                     model_name=model,
-                    model_params=model_params,finetune=False,
+                    model_params=model_params,
+                    finetune=False,
                 )
 
                 # Track assistant output separately
@@ -572,7 +575,6 @@ def _wrap(open_ai_resource: OpenAiDefinition, initialize, wrapped, args, kwargs)
             #     model_params=model_params,finetune=False,
             # )
 
-            
             if kwargs.get("seed", None) is not None:
                 model_params["seed"] = kwargs.get("seed", None)
 
@@ -625,10 +627,8 @@ async def _wrap_async(
     )
     generation = new_langfuse.generation(**generation)
 
-
     try:
         openai_response = await wrapped(**arg_extractor.get_openai_args())
-        
 
         if _is_streaming_response(openai_response):
             return LangfuseResponseGeneratorAsync(
@@ -666,7 +666,8 @@ async def _wrap_async(
                 synth_tracker_async.track_lm(
                     messages=message_input.messages,
                     model_name=model,
-                    model_params=model_params, finetune=False,
+                    model_params=model_params,
+                    finetune=False,
                 )
 
                 # Track assistant output separately
@@ -683,7 +684,8 @@ async def _wrap_async(
                 synth_tracker_async.track_lm(
                     messages=message_input.messages,
                     model_name=model,
-                    model_params=model_params,finetune=False,
+                    model_params=model_params,
+                    finetune=False,
                 )
 
                 # Track assistant output separately
@@ -973,7 +975,8 @@ class LangfuseResponseGeneratorSync:
         synth_tracker_sync.track_lm(
             messages=message_input.messages,
             model_name=model,
-            model_params=model_params,finetune=False,
+            model_params=model_params,
+            finetune=False,
         )
 
         # Avoid the trace update if a trace-id was provided by the user.
@@ -1110,7 +1113,8 @@ class LangfuseResponseGeneratorAsync:
         synth_tracker_async.track_lm(
             messages=message_input.messages,
             model_name=model,
-            model_params=model_params, finetune=False,
+            model_params=model_params,
+            finetune=False,
         )
 
         # Avoiding the trace-update if trace-id is provided by user.

@@ -343,9 +343,9 @@ def _create_langfuse_update(
 
 @_langfuse_wrapper
 def _wrap(anthropic_resource: AnthropicDefinition, initialize, wrapped, args, kwargs):
-    #print("\n=== WRAP START ===")
-    #print(f"WRAP: Args: {args}")
-    #print(f"WRAP: Kwargs: {kwargs}")
+    # print("\n=== WRAP START ===")
+    # print(f"WRAP: Args: {args}")
+    # print(f"WRAP: Kwargs: {kwargs}")
 
     new_langfuse = initialize()
     start_time = _get_timestamp()
@@ -371,11 +371,11 @@ def _wrap(anthropic_resource: AnthropicDefinition, initialize, wrapped, args, kw
             model, completion, usage = _extract_anthropic_completion(anthropic_response)
             # Synth tracking
             if "messages" in arg_extractor.get_anthropic_args():
-                #print("\nWRAP: Messages API path")
+                # print("\nWRAP: Messages API path")
                 system_content = arg_extractor.get_anthropic_args().get("system")
                 original_messages = arg_extractor.get_anthropic_args()["messages"]
-                #print(f"WRAP: Original messages: {original_messages}")
-                #print(f"WRAP: System content: {system_content}")
+                # print(f"WRAP: Original messages: {original_messages}")
+                # print(f"WRAP: System content: {system_content}")
 
                 if system_content:
                     messages = [
@@ -384,40 +384,40 @@ def _wrap(anthropic_resource: AnthropicDefinition, initialize, wrapped, args, kw
                 else:
                     messages = original_messages
 
-                #print(f"WRAP: Final messages to track: {messages}")
-                #print("WRAP: About to call track_lm")
+                # print(f"WRAP: Final messages to track: {messages}")
+                # print("WRAP: About to call track_lm")
                 synth_tracker_sync.track_lm(
                     messages=messages,
                     model_name=model,
                     model_params=generation_data.get("model_params", {}),
                     finetune=False,
                 )
-                #print("WRAP: Finished track_lm call")
+                # print("WRAP: Finished track_lm call")
 
                 # Track assistant output
                 assistant_msg = [{"role": "assistant", "content": completion}]
-                #rint("About to track LM output")
-                #print("Assistant message: %s", assistant_msg)
+                # rint("About to track LM output")
+                # print("Assistant message: %s", assistant_msg)
 
                 synth_tracker_sync.track_lm_output(
                     messages=assistant_msg,
                     model_name=model,
                     finetune=False,
                 )
-                #print("Finished tracking LM output")
+                # print("Finished tracking LM output")
 
             elif "prompt" in arg_extractor.get_anthropic_args():
-                #print("\nWRAP: Completions API path")
+                # print("\nWRAP: Completions API path")
                 user_prompt = arg_extractor.get_anthropic_args().get("prompt", "")
-                #print(f"WRAP: User prompt: {user_prompt}")
+                # print(f"WRAP: User prompt: {user_prompt}")
                 messages = [{"role": "user", "content": user_prompt}]
-                #print(f"WRAP: Messages created: {messages}")
+                # print(f"WRAP: Messages created: {messages}")
                 assistant_msg = [{"role": "assistant", "content": completion}]
 
-                #print("About to track LM call with model: %s", model)
-                #print("User prompt: %s", user_prompt)
-                #print("Messages to track: %s", messages)
-                #print("Model params: %s", generation_data.get("model_params", {}))
+                # print("About to track LM call with model: %s", model)
+                # print("User prompt: %s", user_prompt)
+                # print("Messages to track: %s", messages)
+                # print("Model params: %s", generation_data.get("model_params", {}))
 
                 synth_tracker_sync.track_lm(
                     messages=messages,
@@ -426,15 +426,15 @@ def _wrap(anthropic_resource: AnthropicDefinition, initialize, wrapped, args, kw
                     finetune=False,
                 )
 
-                #print("About to track LM output")
-                #print("Assistant message: %s", assistant_msg)
+                # print("About to track LM output")
+                # print("Assistant message: %s", assistant_msg)
 
                 synth_tracker_sync.track_lm_output(
                     messages=assistant_msg,
                     model_name=model,
                     finetune=False,
                 )
-                #print("Finished tracking LM output")
+                # print("Finished tracking LM output")
 
             # Complete the generation update
             _create_langfuse_update(
