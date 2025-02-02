@@ -88,9 +88,9 @@ def set_current_event(
 
         # Get current active events from context var
         active_events = active_events_var.get()
-
+        #print("Active events:", active_events)
         # If there's an existing event of the same type, end it
-        if event.event_type in active_events:
+        if event and event.event_type in active_events:
             existing_event = active_events[event.event_type]
 
             # Check that the active event has the same system_instance_id as the one we're settting
@@ -118,7 +118,8 @@ def set_current_event(
                     except Exception as e:
                         logger.error(f"Failed to store closed event: {str(e)}")
                         raise
-
+        elif not event:
+            logger.debug(f"No event found for type {event.event_type}")
         # Set the new event with both keys
         active_events[event.event_type] = event  # Plain key
         unique_key = f"{event.event_type}-{time.time()}"

@@ -1,387 +1,191 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Generated API",
-    "summary": "API documentation for the SDK",
-    "description": "Automatically generated OpenAPI documentation.",
-    "version": "1.0.0"
+    "title": "Synth SDK",
+    "version": "0.2.125",
+    "description": "SDK for tracing and evaluating AI system behavior"
   },
   "servers": [
     {
-      "url": "/"
+      "url": "https://api.usesynth.ai"
     }
   ],
   "paths": {
-    "/upload/upload": {
+    "/trace": {
       "post": {
-        "tags": [
-          "upload"
+        "summary": "Trace system execution",
+        "description": "Decorator for tracing method execution in an AI system",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "environment"
+              ]
+            },
+            "description": "Source of the computation (AI/model operations or external system operations)"
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Type of event being traced (e.g., inference, training)"
+          },
+          {
+            "name": "manage_event",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "create",
+                "end",
+                null
+              ]
+            },
+            "description": "Controls the lifecycle of the event"
+          }
         ],
-        "summary": "upload",
-        "description": "Upload all system traces and dataset to the server.\nReturns a tuple of (response, questions_json, reward_signals_json, traces_json)\nNote that you can directly upload questions, reward_signals, and traces to the server using the Website\n\nresponse is the response from the server.\nquestions_json is the formatted questions array\nreward_signals_json is the formatted reward signals array\ntraces_json is the formatted traces array\n\n**Function Signature:** `upload(dataset, traces, verbose, show_payload)`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/upload.py#L213)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/upload.py#L213"
-        },
         "responses": {
           "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
+            "description": "Successfully traced execution"
           }
-        },
-        "deprecated": false
+        }
       }
     },
-    "/trackers/track_lm": {
+    "/track/lm": {
       "post": {
-        "tags": [
-          "trackers"
-        ],
-        "summary": "track_lm",
-        "description": "Track a language model interaction within the current trace.\nAutomatically detects whether to use sync or _async tracking.\n\nArgs:\n    messages (List[Dict[str, str]]): List of message dictionaries containing the conversation.\n        Each message should have:\n        - 'role': str - The role of the speaker (e.g., \"user\", \"assistant\", \"system\")\n        - 'content': str - The content of the message\n\n    model_name (str): Name of the language model being used\n        Examples: \"gpt-4\", \"gpt-3.5-turbo\", \"claude-3-opus-20240229\"\n\n    finetune (bool, optional): Whether this interaction is part of a fine-tuning process.\n        Defaults to False.\n\nRaises:\n    RuntimeError: If called outside a traced context (use with @trace_system_sync \n        or @trace_system_async decorator)\n    TypeError: If messages or model_name are not of the correct type\n\nExample:\n    ```python\n    @trace_system_sync(origin=\"agent\", event_type=\"chat\")\n    def process_chat(self, user_input: str):\n        messages = [\n            {\"role\": \"user\", \"content\": user_input}\n        ]\n        SynthTracker.track_lm(\n            messages=messages,\n            model_name=\"gpt-4\"\n        )\n    ```\n\n**Function Signature:** `track_lm(cls, messages, model_name, finetune)`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py#L204)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py#L204"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
+        "summary": "Track language model interaction",
+        "description": "Track interactions with language models like GPT-4, Claude, etc.",
+        "parameters": [
+          {
+            "name": "messages",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string"
                   },
-                  "type": "object"
+                  "content": {
+                    "type": "string"
+                  }
                 }
               }
-            }
+            },
+            "description": "Array of message objects containing role and content"
+          },
+          {
+            "name": "model_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Name of the language model being used"
+          },
+          {
+            "name": "model_params",
+            "in": "body",
+            "required": false,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "temperature": {
+                  "type": "number"
+                },
+                "max_tokens": {
+                  "type": "number"
+                },
+                "top_p": {
+                  "type": "number"
+                },
+                "frequency_penalty": {
+                  "type": "number"
+                },
+                "presence_penalty": {
+                  "type": "number"
+                }
+              }
+            },
+            "description": "Model parameters used for the interaction"
+          },
+          {
+            "name": "finetune",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Whether this is a fine-tuned model"
           }
-        },
-        "deprecated": false
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully tracked LM interaction"
+          }
+        }
       }
     },
-    "/trackers/track_state": {
+    "/track/state": {
       "post": {
-        "tags": [
-          "trackers"
-        ],
-        "summary": "track_state",
-        "description": "Track a state change or variable value within the current trace.\nAutomatically detects whether to use sync or _async tracking.\n\nArgs:\n    variable_name (str): Name of the variable or state being tracked\n\n    variable_value (Union[BaseModel, str, dict, int, float, bool, list, None]): \n        Value to track. Must be one of the supported types:\n        - BaseModel (Pydantic models)\n        - Basic Python types (str, dict, int, float, bool, list)\n        - None\n\n    origin (Literal[\"agent\", \"environment\"]): Source of the state change\n        - \"agent\": Changes from the AI/agent system\n        - \"environment\": Changes from external sources/environment\n\n    annotation (Optional[str], optional): Additional notes about the state change.\n        Defaults to None.\n\nRaises:\n    RuntimeError: If called outside a traced context (use with @trace_system_sync \n        or @trace_system_async decorator)\n    TypeError: If variable_value is not one of the supported types\n    ValueError: If origin is not \"agent\" or \"environment\"\n\nExample:\n    ```python\n    @trace_system_sync(origin=\"agent\", event_type=\"process\")\n    def update_state(self, new_value: dict):\n        SynthTracker.track_state(\n            variable_name=\"system_state\",\n            variable_value=new_value,\n            origin=\"agent\",\n            annotation=\"Updated after processing\"\n        )\n    ```\n\n**Function Signature:** `track_state(cls, variable_name, variable_value, origin, annotation)`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py#L254)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py#L254"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
+        "summary": "Track state changes",
+        "parameters": [
+          {
+            "name": "variable_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variable_value",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
                   "type": "object"
+                },
+                {
+                  "type": "array"
                 }
-              }
+              ]
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "environment"
+              ]
             }
           }
-        },
-        "deprecated": false
-      }
-    },
-    "/decorators/trace_system_sync": {
-      "post": {
-        "tags": [
-          "decorators"
-        ],
-        "summary": "trace_system_sync",
-        "description": "Decorator for tracing synchronous functions.\n\nPurpose is to keep track of inputs and outputs for compute steps for sync functions.\n\n**Function Signature:** `trace_system_sync(origin, event_type, log_result, manage_event, increment_partition, verbose, finetune_step)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L42)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L42"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/decorators/trace_system_async": {
-      "post": {
-        "tags": [
-          "decorators"
-        ],
-        "summary": "trace_system_async",
-        "description": "Decorator for tracing asynchronous functions.\n\nPurpose is to keep track of inputs and outputs for compute steps for _async functions.\n\n**Function Signature:** `trace_system_async(origin, event_type, log_result, manage_event, increment_partition, verbose, finetune_step)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L246)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L246"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/decorators/trace_system": {
-      "post": {
-        "tags": [
-          "decorators"
-        ],
-        "summary": "trace_system",
-        "description": "Decorator that chooses the correct tracing method (sync or _async) based on\nwhether the wrapped function is synchronous or asynchronous.\n\nPurpose is to keep track of inputs and outputs for compute steps for both sync and _async functions.\n\n**Function Signature:** `trace_system(origin, event_type, log_result, manage_event, increment_partition, verbose)`\n\n**Return Type:** `Callable`\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L453)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/decorators.py#L453"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/abstractions/abstractions.TrainingQuestion": {
-      "get": {
-        "tags": [
-          "Classes"
-        ],
-        "summary": "abstractions.TrainingQuestion",
-        "description": "A training question is a question that an agent (system_instance_id) is trying to answer.\nIt contains an intent and criteria that the agent is trying to meet.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/abstractions/abstractions.RewardSignal": {
-      "get": {
-        "tags": [
-          "Classes"
-        ],
-        "summary": "abstractions.RewardSignal",
-        "description": "A reward signal tells us how well an agent (system_instance_id) is doing on a particular question (question_id).\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/abstractions/abstractions.Dataset": {
-      "get": {
-        "tags": [
-          "Classes"
-        ],
-        "summary": "abstractions.Dataset",
-        "description": "A dataset is a collection of training questions and reward signals. \nThis better represents the data that is used to train a model, and gives us more information about the data.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/abstractions.py"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/trackers/trackers.SynthTrackerSync": {
-      "get": {
-        "tags": [
-          "Classes"
-        ],
-        "summary": "trackers.SynthTrackerSync",
-        "description": "Tracker for synchronous functions.\n\nPurpose is to annotate the inside of your sync functions to track intermediate values.\nDecorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.\nThis tracker is instead used to access the data inside of decorated functions.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/trackers/trackers.SynthTrackerAsync": {
-      "get": {
-        "tags": [
-          "Classes"
-        ],
-        "summary": "trackers.SynthTrackerAsync",
-        "description": "Tracker for synchronous functions.\n\nPurpose is to annotate the inside of your sync functions to track intermediate values.\nDecorator @trace_system_sync is used to annotate the functions and track the inputs and outputs.\nThis tracker is instead used to access the data inside of decorated functions.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
-      }
-    },
-    "/trackers/trackers.SynthTracker": {
-      "get": {
-        "tags": [
-          "Classes"
-        ],
-        "summary": "trackers.SynthTracker",
-        "description": "Tracker for synchronous and asynchronous functions. Intelligently chooses between sync and _async trackers.\n\nPurpose is to annotate the inside of your sync and _async functions to track intermediate values.\nDecorators @trace_system_sync and @trace_system_async are used to annotate the functions and track the inputs and outputs.\nThis tracker is instead used to access the data inside of decorated functions.\n\n[View source on GitHub](https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py)",
-        "externalDocs": {
-          "description": "View source on GitHub",
-          "url": "https://github.com/synth-laboratories/synth-sdk/blob/main/synth_sdk/tracing/trackers.py"
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "result": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": false
+        ]
       }
     }
   }

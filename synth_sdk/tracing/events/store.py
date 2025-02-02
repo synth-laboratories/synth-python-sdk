@@ -90,6 +90,7 @@ class EventStore:
         # self.#logger.debug(
         #     f"Event details: opened={event.opened}, closed={event.closed}, partition={event.partition_index}"
         # )
+        #print("Adding event: ", event)
 
         # try:
         if not self._lock.acquire(timeout=5):

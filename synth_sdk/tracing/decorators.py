@@ -97,14 +97,14 @@ async def process_retry_queue_async() -> None:
 
 
 # # This decorator is used to trace synchronous functions
-def trace_system_sync(
-    origin: Literal["agent", "environment"],
+def trace_event_sync(
     event_type: str,
-    log_result: bool = False,
-    manage_event: Literal["create", "end", None] = None,
-    increment_partition: bool = False,
-    verbose: bool = False,
     finetune_step: bool = True,
+    origin: Literal["agent", "environment"] = "agent",
+    log_result: bool = False,
+    manage_event: Literal["create", "end", "create_and_end"] = "create_and_end",
+    increment_partition: bool = True,
+    verbose: bool = False,
 ) -> Callable:
     """Decorator for tracing synchronous functions.
 
@@ -175,16 +175,16 @@ def trace_system_sync(
                     for param, value in bound_args.arguments.items():
                         if param == "self":
                             continue
-                        print("Tracking state - 178")
-                        synth_tracker_sync.track_state(
-                            variable_name=param, variable_value=value, origin=origin
-                        )
+                        # print("Tracking state - 178")
+                        # synth_tracker_sync.track_state(
+                        #     variable_name=param, variable_value=value, origin=origin
+                        # )
 
                     # Execute the function
                     result = func(*args, **kwargs)
 
                     # Automatically trace function output
-                    #track_result(result, synth_tracker_sync, origin)
+                    # track_result(result, synth_tracker_sync, origin)
 
                     # Collect traced inputs and outputs
                     traced_inputs, traced_outputs = synth_tracker_sync.get_traced_data()
@@ -197,9 +197,9 @@ def trace_system_sync(
                     }
 
                     # Organize traced data by origin
-                    #print("N items in traced inputs: ", len(traced_inputs), ["messages" in item for item in traced_inputs], [item.keys() for item in traced_inputs])
+                    # print("N items in traced inputs: ", len(traced_inputs), ["messages" in item for item in traced_inputs], [item.keys() for item in traced_inputs])
                     for item in traced_inputs:
-                        #print("Item: ", item)
+                        # print("Item: ", item)
                         var_origin = item["origin"]
                         if "variable_value" in item and "variable_name" in item:
                             # Standard variable input
@@ -210,9 +210,15 @@ def trace_system_sync(
                                     }
                                 )
                             )
-                            compute_steps_by_origin[var_origin]["finetune"] = item["finetune"] if "finetune" in item else False
-                            compute_steps_by_origin[var_origin]["model_name"] = item["model_name"] if "model_name" in item else None
-                            compute_steps_by_origin[var_origin]["model_params"] = item["model_params"] if "model_params" in item else None
+                            compute_steps_by_origin[var_origin]["finetune"] = (
+                                item["finetune"] if "finetune" in item else False
+                            )
+                            compute_steps_by_origin[var_origin]["model_name"] = (
+                                item["model_name"] if "model_name" in item else None
+                            )
+                            compute_steps_by_origin[var_origin]["model_params"] = (
+                                item["model_params"] if "model_params" in item else None
+                            )
                         elif "messages" in item:
                             # Message input from track_lm
                             compute_steps_by_origin[var_origin]["inputs"].append(
@@ -232,7 +238,7 @@ def trace_system_sync(
                         else:
                             logger.warning(f"Unhandled traced input item: {item}")
 
-                    #print("N items in traced outputs: ", len(traced_outputs), ["messages" in item for item in traced_outputs], [item.keys() for item in traced_outputs])
+                    # print("N items in traced outputs: ", len(traced_outputs), ["messages" in item for item in traced_outputs], [item.keys() for item in traced_outputs])
 
                     # Temporary Kludge
                     for item in [i for i in traced_outputs if "messages" in i]:
@@ -261,9 +267,21 @@ def trace_system_sync(
                     for var_origin in ["agent", "environment"]:
                         inputs = compute_steps_by_origin[var_origin]["inputs"]
                         outputs = compute_steps_by_origin[var_origin]["outputs"]
-                        should_learn = compute_steps_by_origin[var_origin]["finetune"] if "finetune" in compute_steps_by_origin[var_origin] else False
-                        model_name = compute_steps_by_origin[var_origin]["model_name"] if "model_name" in compute_steps_by_origin[var_origin] else None
-                        model_params = compute_steps_by_origin[var_origin]["model_params"] if "model_params" in compute_steps_by_origin[var_origin] else None
+                        should_learn = (
+                            compute_steps_by_origin[var_origin]["finetune"]
+                            if "finetune" in compute_steps_by_origin[var_origin]
+                            else False
+                        )
+                        model_name = (
+                            compute_steps_by_origin[var_origin]["model_name"]
+                            if "model_name" in compute_steps_by_origin[var_origin]
+                            else None
+                        )
+                        model_params = (
+                            compute_steps_by_origin[var_origin]["model_params"]
+                            if "model_params" in compute_steps_by_origin[var_origin]
+                            else None
+                        )
                         if inputs or outputs:
                             event_order = (
                                 1 + len(event.environment_compute_steps) + 1
@@ -310,7 +328,7 @@ def trace_system_sync(
                             if config.mode == LoggingMode.INSTANT:
                                 client = ImmediateLogClient(config)
                                 client.send_event(current_event, context)
-                            #print("Adding this event: ", current_event)
+                            # print("Adding this event: ", current_event)
                             event_store.add_event(
                                 context["system_name"],
                                 context["system_id"],
@@ -331,14 +349,14 @@ def trace_system_sync(
     return decorator
 
 
-def trace_system_async(
-    origin: Literal["agent", "environment"],
+def trace_event_async(
     event_type: str,
-    log_result: bool = False,
-    manage_event: Literal["create", "end", "create_and_end", "lazy_end", None] = None,
-    increment_partition: bool = False,
-    verbose: bool = False,
     finetune_step: bool = True,
+    origin: Literal["agent", "environment"] = "agent",
+    log_result: bool = False,
+    manage_event: Literal["create", "end", "create_and_end"] = "create_and_end",
+    increment_partition: bool = True,
+    verbose: bool = False,
 ) -> Callable:
     """Decorator for tracing asynchronous functions.
 
@@ -421,7 +439,7 @@ def trace_system_async(
                     result = await func(*args, **kwargs)
 
                     # Automatically trace function output
-                    #track_result(result, synth_tracker_async, origin)
+                    # track_result(result, synth_tracker_async, origin)
 
                     # Collect traced inputs and outputs
                     traced_inputs, traced_outputs = (
@@ -462,8 +480,12 @@ def trace_system_async(
 
                             model_name = item["model_name"]
                             model_params = item["model_params"]
-                            compute_steps_by_origin[var_origin]["model_name"] = model_name
-                            compute_steps_by_origin[var_origin]["model_params"] = model_params
+                            compute_steps_by_origin[var_origin]["model_name"] = (
+                                model_name
+                            )
+                            compute_steps_by_origin[var_origin]["model_params"] = (
+                                model_params
+                            )
                         else:
                             logger.warning(f"Unhandled traced input item: {item}")
 
@@ -491,7 +513,11 @@ def trace_system_async(
                     for var_origin in ["agent", "environment"]:
                         inputs = compute_steps_by_origin[var_origin]["inputs"]
                         outputs = compute_steps_by_origin[var_origin]["outputs"]
-                        model_name = compute_steps_by_origin[var_origin]["model_name"] if "model_name" in compute_steps_by_origin[var_origin] else None
+                        model_name = (
+                            compute_steps_by_origin[var_origin]["model_name"]
+                            if "model_name" in compute_steps_by_origin[var_origin]
+                            else None
+                        )
                         model_params = (
                             compute_steps_by_origin[var_origin]["model_params"]
                             if "model_params" in compute_steps_by_origin[var_origin]
@@ -597,7 +623,7 @@ def trace_system(
         if inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func):
             # Use async tracing
             # logger.debug("Using async tracing")
-            async_decorator = trace_system_async(
+            async_decorator = trace_event_async(
                 origin,
                 event_type,
                 log_result,
@@ -609,7 +635,7 @@ def trace_system(
         else:
             # Use sync tracing
             # logger.debug("Using sync tracing")
-            sync_decorator = trace_system_sync(
+            sync_decorator = trace_event_sync(
                 origin,
                 event_type,
                 log_result,
