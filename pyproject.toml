@@ -1,6 +1,6 @@
 [project]
 name = "synth-sdk"
-dynamic = ["version"]
+version = "0.3.1.dev1"
 description = ""
 authors = [{name = "Synth AI", email = "josh@usesynth.ai"}]
 license = {text = "MIT"}
@@ -40,6 +40,3 @@ build-backend = "setuptools.build_meta"
 
 [tool.hatch.build.targets.wheel]
 packages = ["synth_sdk"]
-
-[tool.setuptools.dynamic]
-version = {attr = "synth_sdk.__version__"}
