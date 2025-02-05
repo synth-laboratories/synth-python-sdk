@@ -4,11 +4,11 @@ import logging
 import os
 import ssl
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple, TypedDict
 
 import requests
 from dotenv import load_dotenv
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
 
@@ -73,18 +73,16 @@ def load_signed_url(signed_url: str, dataset: Dataset, traces: List[SystemTrace]
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"Error making request: {str(e)}")
-        print(f"Request payload: {payload}")  # Add this for debugging
+        print(f"Request payload: {payload}")  # Debugging info
         raise
 
     if response.status_code != 200:
         raise ValueError(
-            f"Failed to load signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
+            f"Failed to load signed URL Status Code: {response.status_code} "
+            f"Response: {response.text}, Signed URL: {signed_url}"
         )
     else:
         pass
-        # print(
-        #     f"Successfully loaded signed URL Status Code: {response.status_code} Response: {response.text}, Signed URL: {signed_url}"
-        # )
 
 
 def send_system_traces_s3(
@@ -173,11 +171,20 @@ def get_upload_id(
 
 
 class UploadValidator(BaseModel):
+    """Validator for upload data format."""
+
+    model_config = ConfigDict(
+        from_attributes=True,  # Replaces the deprecated orm_mode
+        validate_assignment=True,
+        extra="forbid",  # Prevent additional fields
+    )
+
     traces: List[Dict[str, Any]]
     dataset: Dict[str, Any]
 
-    @validator("traces")
-    def validate_traces(cls, traces):
+    @field_validator("traces")
+    @classmethod
+    def validate_traces(cls, traces: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not traces:
             raise ValueError("Traces list cannot be empty")
 
@@ -226,8 +233,9 @@ class UploadValidator(BaseModel):
 
         return traces
 
-    @validator("dataset")
-    def validate_dataset(cls, dataset):
+    @field_validator("dataset")
+    @classmethod
+    def validate_dataset(cls, dataset: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ["questions", "reward_signals"]
         missing_fields = [f for f in required_fields if f not in dataset]
         if missing_fields:
@@ -246,14 +254,6 @@ class UploadValidator(BaseModel):
         reward_signals = dataset["reward_signals"]
         if not isinstance(reward_signals, list):
             raise ValueError("Reward signals must be a list")
-
-        for signal in reward_signals:
-            required_signal_fields = ["question_id", "system_instance_id", "reward"]
-            missing_fields = [f for f in required_signal_fields if f not in signal]
-            if missing_fields:
-                raise ValueError(
-                    f"Reward signal missing required fields: {missing_fields}"
-                )
 
         return dataset
 
@@ -314,22 +314,49 @@ def format_upload_output(dataset, traces):
     return questions_data, reward_signals_data, traces_data
 
 
-# Supports calls from both async and sync contexts
+class UploadIdResponse(TypedDict):
+    message: str
+    upload_id: str
+    signed_url: str
+
+
+class ProcessUploadResponse(TypedDict):
+    status: str
+    upload_id: str
+    signed_url: str
+
+
 def upload(
     dataset: Dataset,
     traces: List[SystemTrace] = [],
     verbose: bool = False,
     show_payload: bool = False,
-):
+) -> Tuple[
+    ProcessUploadResponse,
+    List[Dict[str, Any]],
+    List[Dict[str, Any]],
+    List[Dict[str, Any]],
+]:
     """Upload all system traces and dataset to the server.
-    Returns a tuple of (response, questions_json, reward_signals_json, traces_json)
-    Note that you can directly upload questions, reward_signals, and traces to the server using the Website
 
-    response is the response from the server.
-    questions_json is the formatted questions array
-    reward_signals_json is the formatted reward signals array
-    traces_json is the formatted traces array"""
+    Args:
+        dataset: Dataset containing questions and reward signals
+        traces: List of system traces to upload
+        verbose: Whether to print verbose output
+        show_payload: Whether to show the payload being sent
 
+    Returns:
+        Tuple containing:
+        - response: Server response with status, upload_id, and signed_url
+        - questions_json: List of formatted questions
+        - reward_signals_json: List of formatted reward signals
+        - traces_json: List of formatted traces
+
+    Raises:
+        ValueError: If no system traces found or validation fails
+        requests.exceptions.HTTPError: If server request fails
+        RuntimeError: If SYNTH_API_KEY environment variable not set
+    """
     return upload_helper(dataset, traces, verbose, show_payload)
 
 
@@ -338,7 +365,16 @@ def upload_helper(
     traces: List[SystemTrace] = [],
     verbose: bool = False,
     show_payload: bool = False,
-):
+) -> Tuple[
+    ProcessUploadResponse,
+    List[Dict[str, Any]],
+    List[Dict[str, Any]],
+    List[Dict[str, Any]],
+]:
+    """Helper function to handle the upload process.
+
+    Returns same type as upload() function.
+    """
     api_key = os.getenv("SYNTH_API_KEY")
     if not api_key:
         raise ValueError("SYNTH_API_KEY environment variable not set")
@@ -455,7 +491,16 @@ def upload_helper(
         questions_json, reward_signals_json, traces_json = format_upload_output(
             dataset, traces
         )
-        return upload_id, questions_json, reward_signals_json, traces_json
+        return (
+            {
+                "status": "success",
+                "upload_id": upload_id,
+                "signed_url": signed_url,
+            },
+            questions_json,
+            reward_signals_json,
+            traces_json,
+        )
 
     except ValueError as e:
         if verbose:

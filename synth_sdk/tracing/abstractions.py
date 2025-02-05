@@ -103,6 +103,13 @@ class Event:
     environment_compute_steps: List["EnvironmentComputeStep"]
     system_name: Optional[str] = None
     system_id: Optional[str] = None
+    event_metadata: Dict[str, Any] = (
+        None  # JSON-serializable metadata for this specific event
+    )
+
+    def __post_init__(self):
+        if self.event_metadata is None:
+            self.event_metadata = {}
 
     def to_dict(self):
         return {
@@ -118,6 +125,7 @@ class Event:
             "environment_compute_steps": [
                 step.to_dict() for step in self.environment_compute_steps
             ],
+            "event_metadata": self.event_metadata,
         }
 
     # backwards compatibility
@@ -144,9 +152,16 @@ class SystemTrace:
     system_name: str
     system_id: str
     system_instance_id: str
-    metadata: Optional[Dict[str, Any]]
     partition: List[EventPartitionElement]
+    metadata: Optional[Dict[str, Any]] = None  # System-level metadata
+    instance_metadata: Dict[str, Any] = (
+        None  # JSON-serializable metadata for this specific instance
+    )
     current_partition_index: int = 0  # Track current partition
+
+    def __post_init__(self):
+        if self.instance_metadata is None:
+            self.instance_metadata = {}
 
     def to_dict(self):
         return {
@@ -156,6 +171,7 @@ class SystemTrace:
             "partition": [element.to_dict() for element in self.partition],
             "current_partition_index": self.current_partition_index,
             "metadata": self.metadata if self.metadata else None,
+            "instance_metadata": self.instance_metadata,
         }
 
 

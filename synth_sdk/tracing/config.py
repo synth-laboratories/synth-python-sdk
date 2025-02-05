@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, TypedDict, Union
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
@@ -9,7 +9,8 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
     SpanExportResult,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import NotRequired
 
 
 class InMemoryExporter(SpanExporter):
@@ -82,6 +83,21 @@ class LoggingMode(Enum):
     DEFERRED = "deferred"
 
 
+class Origin(str, Enum):
+    """Source of computation in the system."""
+
+    AGENT = "agent"
+    ENVIRONMENT = "environment"
+
+
+class EventManagement(str, Enum):
+    """Controls the lifecycle of trace events."""
+
+    CREATE = "create"
+    END = "end"
+    CREATE_AND_END = "create_and_end"
+
+
 class TracingConfig(BaseModel):
     mode: LoggingMode = Field(default=LoggingMode.DEFERRED)
     api_key: str
@@ -100,8 +116,27 @@ class TracingConfig(BaseModel):
         default=30.0, gt=0, description="Connection keepalive time in seconds"
     )
 
-    class Config:
-        """Pydantic model configuration"""
+    model_config = ConfigDict(
+        validate_assignment=True, extra="forbid"
+    )  # Prevent additional fields
 
-        validate_assignment = True
-        extra = "forbid"  # Prevent additional fields
+
+class Message(TypedDict):
+    """A message in a conversation with an AI model."""
+
+    role: str
+    content: str
+    name: NotRequired[str]
+    function_call: NotRequired[Dict[str, str]]
+
+
+class ModelParams(TypedDict, total=False):
+    """Parameters for configuring model behavior."""
+
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: Union[str, List[str]]
+    functions: List[Dict]
