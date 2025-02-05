@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from functools import wraps
-from typing import Any, Callable, Dict, List, Literal
+from typing import Any, Callable, Dict, List, Literal, ParamSpec, TypeVar
 
 from synth_sdk.tracing.abstractions import (
     AgentComputeStep,
@@ -15,8 +15,11 @@ from synth_sdk.tracing.abstractions import (
     MessageInputs,
     MessageOutputs,
 )
-from synth_sdk.tracing.config import LoggingMode, TracingConfig
-from synth_sdk.tracing.context import get_current_context, trace_context
+from synth_sdk.tracing.config import EventManagement, LoggingMode, Origin, TracingConfig
+from synth_sdk.tracing.context import (
+    get_current_context,
+    trace_context,
+)
 from synth_sdk.tracing.events.manage import set_current_event
 from synth_sdk.tracing.events.store import event_store
 from synth_sdk.tracing.immediate_client import (
@@ -36,6 +39,9 @@ from synth_sdk.tracing.trackers import (
 from synth_sdk.tracing.utils import get_system_id
 
 logger = logging.getLogger(__name__)
+
+P = ParamSpec("P")  # For capturing any parameters
+R = TypeVar("R")  # For capturing return type
 
 
 def clear_current_event(event_type: str) -> None:
@@ -96,22 +102,36 @@ async def process_retry_queue_async() -> None:
         logger.error(f"Error processing retry queue: {e}")
 
 
-# # This decorator is used to trace synchronous functions
 def trace_event_sync(
     event_type: str,
     finetune_step: bool = True,
-    origin: Literal["agent", "environment"] = "agent",
+    origin: Origin = Origin.AGENT,
     log_result: bool = False,
-    manage_event: Literal["create", "end", "create_and_end"] = "create_and_end",
+    manage_event: EventManagement = EventManagement.CREATE_AND_END,
     increment_partition: bool = True,
     verbose: bool = False,
-) -> Callable:
-    """Decorator for tracing synchronous functions.
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Decorator for tracing synchronous function execution.
 
-    Purpose is to keep track of inputs and outputs for compute steps for sync functions.
+    Args:
+        event_type: Type of event being traced (e.g., "inference", "training")
+        finetune_step: Whether this step should be used for fine-tuning
+        origin: Source of computation (AI/model or external system)
+        log_result: Whether to log the function's return value
+        manage_event: Controls the lifecycle of the event
+        increment_partition: Whether to increment the partition index
+        verbose: Whether to print debug information
+
+    Example:
+        >>> @trace_event_sync("inference")
+        ... def process_input(self, text: str) -> str:
+        ...     return f"Processed: {text}"
+
+    Returns:
+        A decorator that wraps the function and traces its execution
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Determine the instance (self) if it's a method
@@ -352,18 +372,33 @@ def trace_event_sync(
 def trace_event_async(
     event_type: str,
     finetune_step: bool = True,
-    origin: Literal["agent", "environment"] = "agent",
+    origin: Origin = Origin.AGENT,
     log_result: bool = False,
-    manage_event: Literal["create", "end", "create_and_end"] = "create_and_end",
+    manage_event: EventManagement = EventManagement.CREATE_AND_END,
     increment_partition: bool = True,
     verbose: bool = False,
-) -> Callable:
-    """Decorator for tracing asynchronous functions.
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Decorator for tracing asynchronous function execution.
 
-    Purpose is to keep track of inputs and outputs for compute steps for async functions.
+    Args:
+        event_type: Type of event being traced (e.g., "inference", "training")
+        finetune_step: Whether this step should be used for fine-tuning
+        origin: Source of computation (AI/model or external system)
+        log_result: Whether to log the function's return value
+        manage_event: Controls the lifecycle of the event
+        increment_partition: Whether to increment the partition index
+        verbose: Whether to print debug information
+
+    Example:
+        >>> @trace_event_async("inference")
+        ... async def process_input(self, text: str) -> str:
+        ...     return f"Processed: {text}"
+
+    Returns:
+        A decorator that wraps the async function and traces its execution
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             # Determine the instance (self) if it's a method

@@ -4,7 +4,7 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
-from synth_sdk.tracing.config import VALID_TYPES
+from synth_sdk.tracing.config import VALID_TYPES, Message, ModelParams
 from synth_sdk.tracing.local import _local
 
 # Existing SynthTrackerSync and SynthTrackerAsync classes...
@@ -460,17 +460,17 @@ class SynthTracker:
 
 
 def track_messages_sync(
-    input_messages: List[Dict[str, str]],
-    output_messages: List[Dict[str, str]],
+    input_messages: List[Message],
+    output_messages: List[Message],
     model_name: str,
-    model_params: Optional[Dict[str, Union[str, int, float]]] = None,
+    model_params: Optional[ModelParams] = None,
     finetune: bool = False,
 ) -> None:
-    """Wrapper function to track both input and output messages in a conversation synchronously.
+    """Track both input and output messages in a conversation synchronously.
 
     Args:
-        input_messages: List of input message dictionaries (e.g., user messages)
-        output_messages: List of output message dictionaries (e.g., assistant responses)
+        input_messages: List of input messages (e.g., user messages)
+        output_messages: List of output messages (e.g., assistant responses)
         model_name: Name of the language model being used
         model_params: Optional parameters used for the model
         finetune: Whether this conversation should be used for fine-tuning
@@ -492,17 +492,17 @@ def track_messages_sync(
 
 
 async def track_messages_async(
-    input_messages: List[Dict[str, str]],
-    output_messages: List[Dict[str, str]],
+    input_messages: List[Message],
+    output_messages: List[Message],
     model_name: str,
-    model_params: Optional[Dict[str, Union[str, int, float]]] = None,
+    model_params: Optional[ModelParams] = None,
     finetune: bool = False,
 ) -> None:
-    """Wrapper function to track both input and output messages in a conversation asynchronously.
+    """Track both input and output messages in a conversation asynchronously.
 
     Args:
-        input_messages: List of input message dictionaries (e.g., user messages)
-        output_messages: List of output message dictionaries (e.g., assistant responses)
+        input_messages: List of input messages (e.g., user messages)
+        output_messages: List of output messages (e.g., assistant responses)
         model_name: Name of the language model being used
         model_params: Optional parameters used for the model
         finetune: Whether this conversation should be used for fine-tuning

@@ -1,4 +1,13 @@
-"""Synth SDK initialization file"""
+"""
+Synth SDK - A Python SDK for building and managing AI agents
+"""
+
+__version__ = "0.3.0"
+
+# For development versions, uncomment and modify this line:
+# __version__ = "0.3.0.dev0"
+
+from .tracing import *  # noqa
 
 # Import version from package metadata
 from importlib import metadata
