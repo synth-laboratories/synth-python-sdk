@@ -165,5 +165,7 @@ cython_debug/
 uv.lock
 
 
-dev/** */
-dev
+dev_scripts/** */
+dev_scripts
+temp
+recordings
