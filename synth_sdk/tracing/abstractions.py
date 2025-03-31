@@ -121,7 +121,7 @@ class Event:
             if isinstance(self.closed, datetime)
             else self.closed,
             "partition_index": self.partition_index,
-            "agent_compute_step": self.agent_compute_step.to_dict(),
+            "agent_compute_step": self.agent_compute_step.to_dict() if self.agent_compute_step else None,
             "environment_compute_steps": [
                 step.to_dict() for step in self.environment_compute_steps
             ],

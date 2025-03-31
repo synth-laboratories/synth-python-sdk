@@ -465,9 +465,9 @@ def _wrap(anthropic_resource: AnthropicDefinition, initialize, wrapped, args, kw
 async def _wrap_async(
     anthropic_resource: AnthropicDefinition, initialize, wrapped, args, kwargs
 ):
-    print("\n=== WRAP_ASYNC START ===")
-    print(f"WRAP_ASYNC: Args: {args}")
-    print(f"WRAP_ASYNC: Kwargs: {kwargs}")
+    # print("\n=== WRAP_ASYNC START ===")
+    # print(f"WRAP_ASYNC: Args: {args}")
+    # print(f"WRAP_ASYNC: Kwargs: {kwargs}")
 
     new_langfuse = initialize()
     start_time = _get_timestamp()
@@ -478,7 +478,7 @@ async def _wrap_async(
         synth_tracker_async._local, "initialized", False
     ):
         synth_tracker_async.initialize()
-        print("WRAP_ASYNC: Initialized async tracker")
+        # print("WRAP_ASYNC: Initialized async tracker")
 
     generation_data, is_nested_trace = _get_langfuse_data_from_kwargs(
         anthropic_resource, new_langfuse, start_time, arg_extractor.get_langfuse_args()
@@ -495,11 +495,11 @@ async def _wrap_async(
 
         # Synth tracking
         if "messages" in arg_extractor.get_anthropic_args():
-            logger.debug("WRAP_ASYNC: Messages API path detected")
+            #logger.debug("WRAP_ASYNC: Messages API path detected")
             system_content = arg_extractor.get_anthropic_args().get("system")
             original_messages = arg_extractor.get_anthropic_args()["messages"]
-            logger.debug("WRAP_ASYNC: Original messages: %s", original_messages)
-            logger.debug("WRAP_ASYNC: System content: %s", system_content)
+            # logger.debug("WRAP_ASYNC: Original messages: %s", original_messages)
+            # logger.debug("WRAP_ASYNC: System content: %s", system_content)
 
             if system_content:
                 messages = [
@@ -508,7 +508,7 @@ async def _wrap_async(
             else:
                 messages = original_messages
 
-            logger.debug("WRAP_ASYNC: About to track messages: %s", messages)
+            #logger.debug("WRAP_ASYNC: About to track messages: %s", messages)
             synth_tracker_async.track_lm(
                 messages=messages,
                 model_name=model,

@@ -1,13 +1,14 @@
 import asyncio
 import logging
 from contextlib import contextmanager
-from typing import Dict, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar
 
 from synth_sdk.tracing.local import (
     _local,
     active_events_var,
     system_id_var,
     system_instance_id_var,
+    system_instance_metadata_var,
     system_name_var,
 )
 
@@ -59,11 +60,19 @@ class ContextState(Generic[T]):
 system_name_state = ContextState("system_name", system_name_var)
 system_id_state = ContextState("system_id", system_id_var)
 system_instance_id_state = ContextState("system_instance_id", system_instance_id_var)
+system_instance_metadata_state = ContextState(
+    "system_instance_metadata", system_instance_metadata_var
+)
 active_events_state = ContextState("active_events", active_events_var)
 
 
 @contextmanager
-def trace_context(system_name: str, system_id: str, system_instance_id: str):
+def trace_context(
+    system_name: str,
+    system_id: str,
+    system_instance_id: str,
+    system_instance_metadata: Optional[Dict[str, Any]] = None,
+):
     """Context manager for setting up tracing context.
 
     This ensures proper setup and cleanup of context variables in both sync and async code.
@@ -73,11 +82,13 @@ def trace_context(system_name: str, system_id: str, system_instance_id: str):
         system_name: Name of the system
         system_id: ID of the system
         system_instance_id: Instance ID of the system
+        system_instance_metadata: Optional metadata for the system instance
     """
     # Store existing context if any
     prev_system_name = system_name_state.get()
     prev_system_id = system_id_state.get()
     prev_system_instance_id = system_instance_id_state.get()
+    prev_system_instance_metadata = system_instance_metadata_state.get()
     prev_active_events = active_events_state.get()
 
     try:
@@ -85,6 +96,14 @@ def trace_context(system_name: str, system_id: str, system_instance_id: str):
         system_name_token = system_name_state.set(system_name)
         system_id_token = system_id_state.set(system_id)
         system_instance_id_token = system_instance_id_state.set(system_instance_id)
+
+        # Set system_instance_metadata if provided, otherwise use empty dict
+        metadata_to_set = (
+            system_instance_metadata if system_instance_metadata is not None else {}
+        )
+        system_instance_metadata_token = system_instance_metadata_state.set(
+            metadata_to_set
+        )
 
         # Initialize active events if not present
         if not active_events_state.get():
@@ -108,20 +127,26 @@ def trace_context(system_name: str, system_id: str, system_instance_id: str):
         else:
             system_instance_id_state.reset(system_instance_id_token)
 
+        if prev_system_instance_metadata is not None:
+            system_instance_metadata_state.set(prev_system_instance_metadata)
+        else:
+            system_instance_metadata_state.reset(system_instance_metadata_token)
+
         if prev_active_events is not None:
             active_events_state.set(prev_active_events)
         else:
             active_events_state.reset()
 
 
-def get_current_context() -> Dict[str, str]:
+def get_current_context() -> Dict[str, Any]:
     """Get the current tracing context.
 
     Returns:
-        Dict containing current system_name, system_id, and system_instance_id
+        Dict containing current system_name, system_id, system_instance_id, and system_instance_metadata
     """
     return {
         "system_name": system_name_state.get(),
         "system_id": system_id_state.get(),
         "system_instance_id": system_instance_id_state.get(),
+        "system_instance_metadata": system_instance_metadata_state.get() or {},
     }

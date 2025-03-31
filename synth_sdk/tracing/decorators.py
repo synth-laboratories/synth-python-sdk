@@ -157,6 +157,9 @@ def trace_event_sync(
                 system_name=self_instance.system_name,
                 system_id=get_system_id(self_instance.system_name),
                 system_instance_id=self_instance.system_instance_id,
+                system_instance_metadata=getattr(
+                    self_instance, "system_instance_metadata", None
+                ),
             ):
                 # Initialize Trace
                 synth_tracker_sync.initialize()
@@ -424,6 +427,9 @@ def trace_event_async(
                 system_name=self_instance.system_name,
                 system_id=get_system_id(self_instance.system_name),
                 system_instance_id=self_instance.system_instance_id,
+                system_instance_metadata=getattr(
+                    self_instance, "system_instance_metadata", None
+                ),
             ):
                 # Initialize AsyncTrace
                 synth_tracker_async.initialize()

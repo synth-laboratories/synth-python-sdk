@@ -33,6 +33,22 @@ class EventStore:
         def _get_or_create():
             # logger.debug("Inside _get_or_create")
             if system_instance_id not in self._traces:
+                # Get system_instance_metadata from context if available
+                system_instance_metadata = {}
+                try:
+                    from synth_sdk.tracing.context import get_current_context
+
+                    context = get_current_context()
+                    if (
+                        "system_instance_metadata" in context
+                        and context["system_instance_metadata"]
+                    ):
+                        system_instance_metadata = context["system_instance_metadata"]
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to get system_instance_metadata from context: {str(e)}"
+                    )
+
                 # logger.debug(f"Creating new system trace for {system_instance_id}")
                 self._traces[system_instance_id] = SystemTrace(
                     system_name=system_name,
@@ -41,6 +57,7 @@ class EventStore:
                     metadata={},
                     partition=[],  # EventPartitionElement(partition_index=0, events=[])
                     current_partition_index=0,
+                    instance_metadata=system_instance_metadata,
                 )
             # logger.debug("Returning system trace")
             return self._traces[system_instance_id]
